@@ -123,33 +123,33 @@ contains
     end function riesz_energy
 
 
-    pure subroutine riesz_energy_gradient(points, ener, grad)
+    pure subroutine riesz_energy_force(points, ener, force)
         real(dp), intent(in) :: points(d + 1, num_points)
-        real(dp), intent(out) :: ener, grad(d + 1, num_points)
+        real(dp), intent(out) :: ener, force(d + 1, num_points)
 
         real(dp) :: displ(d + 1), dist_sq, term
         integer :: i, j
 
         ener = 0.0d0
         do j = 1, num_points
-            grad(:,j) = 0.0d0
+            force(:,j) = 0.0d0
             do i = 1, j - 1
                 displ = points(:,i) - points(:,j)
                 dist_sq = dot_product(displ, displ)
                 term = dist_sq**(-0.5d0 * s)
                 ener = ener + term
                 term = s * term / dist_sq
-                grad(:,j) = grad(:,j) + term * displ
+                force(:,j) = force(:,j) - term * displ
             end do
             do i = j + 1, num_points
                 displ = points(:,i) - points(:,j)
                 term = s * norm2(displ)**(-s - 2.0d0)
-                grad(:,j) = grad(:,j) + term * displ
+                force(:,j) = force(:,j) - term * displ
             end do
-            grad(:,j) = grad(:,j) - &
-                & dot_product(grad(:,j), points(:,j)) * points(:,j)
+            force(:,j) = force(:,j) - &
+                & dot_product(force(:,j), points(:,j)) * points(:,j)
         end do
-    end subroutine riesz_energy_gradient
+    end subroutine riesz_energy_force
 
 end module sphere_riesz_energy
 
@@ -317,9 +317,8 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     use line_search
     implicit none
 
-    real(dp), dimension(d + 1, num_points) :: old_points, new_points
-    real(dp), dimension(d + 1, num_points) :: old_gradient, new_gradient
-    real(dp) :: old_energy, new_energy, step_size
+    real(dp), dimension(d + 1, num_points) :: points, force
+    real(dp) :: energy, step_size
     real(dp) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
 
@@ -327,7 +326,7 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     write(*,*)
     call print_parameters
     write(*,*)
-    call initialize_point_configuration(old_points, old_energy, old_gradient)
+    call initialize_point_configuration(points, energy, force)
     write(*,*)
 
     ! TODO: Is there a more natural choice of initial step size?
@@ -341,21 +340,17 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_table_header
     call print_optimization_status
     do
-        step_size = quadratic_line_search(old_points, old_energy, &
-                & old_gradient, step_size)
+        step_size = quadratic_line_search(points, energy, force, step_size)
         if (step_size == 0.0d0) then
             call print_optimization_status
-            call save_point_file(old_points, iteration_count)
+            call save_point_file(points, iteration_count)
             write(*,*) "Convergence has been achieved (up to numerical&
                     & round-off error). Exiting."
             stop
         end if
-        new_points = old_points + step_size * step_direction
-        call constrain_points(new_points)
-        call riesz_energy_gradient(new_points, new_energy, new_gradient)
-        old_points = new_points
-        old_energy = new_energy
-        old_gradient = new_gradient
+        points = points + step_size * force
+        call constrain_points(points)
+        call riesz_energy_force(points, energy, force)
         iteration_count = iteration_count + 1
         cur_time = current_time()
         if (cur_time - last_print_time >= print_time) then
@@ -363,7 +358,7 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             last_print_time = cur_time
         end if
         if (cur_time - last_save_time >= save_time) then
-            call save_point_file(old_points, iteration_count)
+            call save_point_file(points, iteration_count)
             last_save_time = cur_time
         end if
     end do
@@ -380,9 +375,9 @@ contains
     end subroutine print_welcome_message
 
 
-    subroutine initialize_point_configuration(points, energy, gradient)
+    subroutine initialize_point_configuration(points, energy, force)
         real(dp), intent(out) :: points(d + 1, num_points)
-        real(dp), intent(out) :: energy, gradient(d + 1, num_points)
+        real(dp), intent(out) :: energy, force(d + 1, num_points)
         integer :: u
         logical :: ex
 
@@ -398,7 +393,7 @@ contains
             call random_normal_points(points)
         end if
         call constrain_points(points)
-        call riesz_energy_gradient(points, energy, gradient)
+        call riesz_energy_force(points, energy, force)
         write(*,*) "Point configuration initialized."
     end subroutine initialize_point_configuration
 
@@ -413,9 +408,9 @@ contains
 
     subroutine print_optimization_status
         write(*,'(I10,A)',advance="no") iteration_count, " |"
-        write(*,'(ES23.15E3,A)',advance="no") old_energy, " |"
+        write(*,'(ES23.15E3,A)',advance="no") energy, " |"
         write(*,'(ES23.15E3,A)',advance="no") &
-                & norm2(old_gradient) / sqrt(real(num_points, dp)), " |"
+                & norm2(force) / sqrt(real(num_points, dp)), " |"
         write(*,'(ES23.15E3,A)') step_size
     end subroutine print_optimization_status
 
