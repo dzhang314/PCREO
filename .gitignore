@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+# Intel Compiler Optimization Reports
+*.optrpt

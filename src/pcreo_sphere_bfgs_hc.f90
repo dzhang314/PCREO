@@ -160,8 +160,8 @@ contains
                 term = s * norm2(displ)**(-s - 2.0d0)
                 grad(:,j) = grad(:,j) + term * displ
             end do
-            grad(:,j) = grad(:,j) - (dot_product(grad(:,j), points(:,j)) / &
-                    & dot_product(points(:,j), points(:,j))) * points(:,j)
+            grad(:,j) = grad(:,j) - &
+                & dot_product(grad(:,j), points(:,j)) * points(:,j)
         end do
     end subroutine riesz_energy_gradient
 

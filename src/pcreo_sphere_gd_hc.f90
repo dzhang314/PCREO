@@ -42,12 +42,10 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     real(dp), parameter :: s = 1.0d0
     integer, parameter :: d = 2
-    integer, parameter :: num_points = 11
+    integer, parameter :: num_points = 1632
 
     real, parameter :: print_time = 0.1 ! print 10 times per second
     real, parameter :: save_time = 15.0 ! save every 15 seconds
-
-    integer, parameter :: num_vars = (d + 1) * num_points
 
 contains
 
@@ -148,8 +146,8 @@ contains
                 term = s * norm2(displ)**(-s - 2.0d0)
                 grad(:,j) = grad(:,j) + term * displ
             end do
-            grad(:,j) = grad(:,j) - (dot_product(grad(:,j), points(:,j)) / &
-                    & dot_product(points(:,j), points(:,j))) * points(:,j)
+            grad(:,j) = grad(:,j) - &
+                & dot_product(grad(:,j), points(:,j)) * points(:,j)
         end do
     end subroutine riesz_energy_gradient
 
@@ -355,9 +353,6 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         new_points = old_points + step_size * step_direction
         call constrain_points(new_points)
         call riesz_energy_gradient(new_points, new_energy, new_gradient)
-        delta_gradient = new_gradient - old_gradient
-        call update_inverse_hessian(inv_hess, delta_gradient, &
-                & step_size, step_direction)
         old_points = new_points
         old_energy = new_energy
         old_gradient = new_gradient
