@@ -1251,7 +1251,7 @@ contains
         displacement = target_pt - source_pt
         r = norm2(displacement)
         energy = energy + pair_potential(r)
-        force = force + (pair_potential_derivative(r) / r) * displacement
+        force = force - (pair_potential_derivative(r) / r) * displacement
     end subroutine add_pair_energy_force
 
 
