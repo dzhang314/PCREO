@@ -1,4 +1,5 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
 ! pcreo_sphere_bfgs_hc - Point Configuration Riesz Energy Optimizer            !
 !                        Optimized for Use on Unit Hyperspheres                !
 !                        BFGS Version                                          !
@@ -192,14 +193,14 @@ contains
         real(dp), intent(in) :: delta_gradient(d + 1, num_points)
         real(dp), intent(in) :: step_size, step_direction(d + 1, num_points)
 
-        real(dp) :: lambda, omicron, sigma, kappa(d + 1, num_points)
+        real(dp) :: lambda, theta, sigma, kappa(d + 1, num_points)
 
         lambda = step_size * ddot(num_vars, &
                 & delta_gradient, 1, step_direction, 1)
         call dsymv('U', num_vars, 1.0d0, inv_hess, &
                 & num_vars, delta_gradient, 1, 0.0d0, kappa, 1)
-        omicron = ddot(num_vars, delta_gradient, 1, kappa, 1)
-        sigma = (lambda + omicron) / (lambda * lambda)
+        theta = ddot(num_vars, delta_gradient, 1, kappa, 1)
+        sigma = (lambda + theta) / (lambda * lambda)
         kappa = kappa - (0.5d0 * step_size * lambda * sigma) * step_direction
         call dsyr2('U', num_vars, -step_size / lambda, &
                 & kappa, 1, step_direction, 1, inv_hess, num_vars)
