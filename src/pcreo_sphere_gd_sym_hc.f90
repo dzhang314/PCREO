@@ -22,7 +22,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     real(dp), parameter :: s = 1.0d0
     integer, parameter :: d = 2
-    integer, parameter :: num_points = 10
+    integer, parameter :: num_points = 27
 
     real(dp), parameter :: print_time = 0.1 ! print 10 times per second
     real(dp), parameter :: save_time = 15.0 ! save every 15 seconds
@@ -1234,120 +1234,123 @@ contains
     end function pair_potential_derivative
 
 
-    pure subroutine add_pair_energy(displ, ener)
-        real(dp), intent(in) :: displ(d + 1)
-        real(dp), intent(inout) :: ener
+    pure subroutine add_pair_energy(source_pt, target_pt, energy)
+        real(dp), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(dp), intent(inout) :: energy
 
-        ener = ener + pair_potential(norm2(displ))
+        real(dp) :: displacement(d + 1), r
+
+        energy = energy + pair_potential(norm2(target_pt - source_pt))
     end subroutine add_pair_energy
 
 
-    pure subroutine add_pair_energy_force(displ, ener, force)
-        real(dp), intent(in) :: displ(d + 1)
-        real(dp), intent(inout) :: ener, force(d + 1)
+    pure subroutine add_pair_energy_force(source_pt, target_pt, energy, force)
+        real(dp), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(dp), intent(inout) :: energy, force(d + 1)
 
-        real(dp) :: r
+        real(dp) :: displacement(d + 1), r
 
-        r = norm2(displ)
-        ener = ener + pair_potential(r)
-        force = force + (pair_potential_derivative(r) / r) * displ
+        displacement = target_pt - source_pt
+        r = norm2(displacement)
+        energy = energy + pair_potential(r)
+        force = force + (pair_potential_derivative(r) / r) * displacement
     end subroutine add_pair_energy_force
 
 
-    pure real(dp) function riesz_energy(points) result (ener)
+    pure real(dp) function riesz_energy(points)
         real(dp), intent(in) :: points(d + 1, num_points)
 
-        integer :: p, q, beta, delta
-        real(dp) :: current_point(d + 1), displ(d + 1)
+        integer :: a, b, p, q
+        real(dp) :: image_point(d + 1)
 
-        ener = 0.0d0
+        riesz_energy = 0.0d0
         do p = 1, num_points
-            do beta = 1, symmetry_group_order
-                current_point = matmul(symmetry_group(:,:,beta), points(:,p))
+            do a = 1, symmetry_group_order
+                image_point = matmul(symmetry_group(:,:,a), points(:,p))
                 do q = 1, num_external_points
-                    displ = current_point - external_points(:,q)
-                    call add_pair_energy(displ, ener)
+                    call add_pair_energy( &
+                        & external_points(:,q), &
+                        & image_point, riesz_energy)
                 end do
-                do delta = 1, beta - 1
-                    displ = current_point - &
-                        & matmul(symmetry_group(:,:,delta), points(:,p))
-                    call add_pair_energy(displ, ener)
+                do b = 1, a - 1
+                    call add_pair_energy( &
+                        & matmul(symmetry_group(:,:,b), points(:,p)), &
+                        & image_point, riesz_energy)
                 end do
-                do delta = beta + 1, symmetry_group_order
-                    displ = current_point - &
-                        & matmul(symmetry_group(:,:,delta), points(:,p))
-                    call add_pair_energy(displ, ener)
+                do b = a + 1, symmetry_group_order
+                    call add_pair_energy( &
+                        & matmul(symmetry_group(:,:,b), points(:,p)), &
+                        & image_point, riesz_energy)
                 end do
                 do q = 1, p - 1
-                    do delta = 1, symmetry_group_order
-                        displ = current_point - &
-                            & matmul(symmetry_group(:,:,delta), points(:,q))
-                        call add_pair_energy(displ, ener)
+                    do b = 1, symmetry_group_order
+                        call add_pair_energy( &
+                            & matmul(symmetry_group(:,:,b), points(:,q)), &
+                            & image_point, riesz_energy)
                     end do
                 end do
                 do q = p + 1, num_points
-                    do delta = 1, symmetry_group_order
-                        displ = current_point - &
-                            & matmul(symmetry_group(:,:,delta), points(:,q))
-                        call add_pair_energy(displ, ener)
+                    do b = 1, symmetry_group_order
+                        call add_pair_energy( &
+                            & matmul(symmetry_group(:,:,b), points(:,q)), &
+                            & image_point, riesz_energy)
                     end do
                 end do
             end do
         end do
-        ener = 0.5d0 * ener
-    end function riesz_energy
+        riesz_energy = 0.5d0 * riesz_energy
+    end subroutine riesz_energy
 
 
-    pure subroutine riesz_energy_force(points, ener, grad)
+    pure subroutine riesz_energy_force(points, energy, force)
         real(dp), intent(in) :: points(d + 1, num_points)
-        real(dp), intent(out) :: ener, grad(d + 1, num_points)
+        real(dp), intent(out) :: energy, force(d + 1, num_points)
 
-        integer :: p, q, beta, delta
-        real(dp) :: current_point(d + 1), displ(d + 1)
-        real(dp) :: grad_ext(d + 1), grad_self(d + 1), grad_other(d + 1)
+        integer :: a, b, p, q
+        real(dp) :: image_point(d + 1), image_force(d + 1)
 
-        ener = 0.0d0
+        energy = 0.0d0
         do p = 1, num_points
             grad(:,p) = 0.0d0
-            do beta = 1, symmetry_group_order
-                current_point = matmul(symmetry_group(:,:,beta), points(:,p))
-                grad_ext = 0.0d0
+            do a = 1, symmetry_group_order
+                image_point = matmul(symmetry_group(:,:,a), points(:,p))
+                image_force = 0.0d0
                 do q = 1, num_external_points
-                    displ = current_point - external_points(:,q)
-                    call add_pair_energy_force(displ, ener, grad_ext)
+                    call add_pair_energy_force( &
+                        & external_points(:,q), &
+                        & image_point, energy, image_force)
                 end do
-                grad_self = 0.0d0
-                do delta = 1, beta - 1
-                    displ = current_point - &
-                        & matmul(symmetry_group(:,:,delta), points(:,p))
-                    call add_pair_energy_force(displ, ener, grad_self)
+                do b = 1, a - 1
+                    call add_pair_energy_force( &
+                        & matmul(symmetry_group(:,:,b), points(:,p)), &
+                        & image_point, energy, image_force)
                 end do
-                do delta = beta + 1, symmetry_group_order
-                    displ = current_point - &
-                        & matmul(symmetry_group(:,:,delta), points(:,p))
-                    call add_pair_energy_force(displ, ener, grad_self)
+                do b = a + 1, symmetry_group_order
+                    call add_pair_energy_force( &
+                        & matmul(symmetry_group(:,:,b), points(:,p)), &
+                        & image_point, energy, image_force)
                 end do
-                grad_other = 0.0d0
                 do q = 1, p - 1
-                    do delta = 1, symmetry_group_order
-                        displ = current_point - &
-                            & matmul(symmetry_group(:,:,delta), points(:,q))
-                        call add_pair_energy_force(displ, ener, grad_other)
+                    do b = 1, symmetry_group_order
+                        call add_pair_energy_force( &
+                            & matmul(symmetry_group(:,:,b), points(:,q)), &
+                            & image_point, energy, image_force)
                     end do
                 end do
                 do q = p + 1, num_points
-                    do delta = 1, symmetry_group_order
-                        displ = current_point - &
-                            & matmul(symmetry_group(:,:,delta), points(:,q))
-                        call add_pair_energy_force(displ, ener, grad_other)
+                    do b = 1, symmetry_group_order
+                        call add_pair_energy_force( &
+                            & matmul(symmetry_group(:,:,b), points(:,q)), &
+                            & image_point, energy, image_force)
                     end do
                 end do
-                grad(:,p) = grad(:,p) + matmul(symmetry_group_inv(:,:,beta), &
-                    & grad_ext + grad_self + grad_other)
+                grad(:,p) = grad(:,p) + &
+                    & matmul(symmetry_group_inv(:,:,a), image_force)
             end do
+            grad(:,p) = grad(:,p) - &
+                & dot_product(grad(:,p), points(:,p)) * points(:,p)
         end do
-        grad = -grad
-        ener = 0.5d0 * ener
+        energy = 0.5d0 * energy
     end subroutine riesz_energy_force
 
 end module sphere_riesz_energy
