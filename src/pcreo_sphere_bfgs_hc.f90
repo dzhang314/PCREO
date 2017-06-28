@@ -486,7 +486,7 @@ contains
         integer :: ticks, tick_rate
         call system_clock(ticks, tick_rate)
         current_time = real(ticks, dp) / real(tick_rate, dp)
-    end
+    end function current_time
 
 
     subroutine save_point_file(points, idx)

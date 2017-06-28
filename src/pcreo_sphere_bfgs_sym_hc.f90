@@ -23,12 +23,12 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     real(dp), parameter :: s = 1.0d0
     integer, parameter :: d = 2
-    integer, parameter :: num_points = 2
+    integer, parameter :: num_points = 10
 
     real, parameter :: print_time = 0.1 ! print 10 times per second
     real, parameter :: save_time = 15.0 ! save every 15 seconds
 
-    real(rk), parameter :: symmetry_group(3, 3, 60) = reshape((/ &
+    real(dp), parameter :: symmetry_group(3, 3, 60) = reshape((/ &
         & +1.0000000000000000000000000000000000000000E+0000_dp, &
         & +0.0000000000000000000000000000000000000000E+0000_dp, &
         & +0.0000000000000000000000000000000000000000E+0000_dp, &
@@ -571,7 +571,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         & -8.0901699437494742410229341718281905886015E-0001_dp /), &
         & (/ 3, 3, 60 /))
 
-    real(rk), parameter :: symmetry_group_inv(3, 3, 60) = reshape((/ &
+    real(dp), parameter :: symmetry_group_inv(3, 3, 60) = reshape((/ &
         & +1.0000000000000000000000000000000000000000E+0000_dp, &
         & +0.0000000000000000000000000000000000000000E+0000_dp, &
         & +0.0000000000000000000000000000000000000000E+0000_dp, &
@@ -1114,7 +1114,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         & -8.0901699437494742410229341718281905886015E-0001_dp /), &
         & (/ 3, 3, 60 /))
 
-    real(rk), parameter :: external_points(3, 62) = reshape((/ &
+    real(dp), parameter :: external_points(3, 62) = reshape((/ &
         & +0.0000000000000000000000000000000000000000E+0000_dp, &
         & +5.2573111211913360602566908484787660728549E-0001_dp, &
         & +8.5065080835203993218154049706301107224040E-0001_dp, &
@@ -1305,6 +1305,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     integer, parameter :: num_vars = (d + 1) * num_points
     integer, parameter :: num_external_points = size(external_points, 2)
+    integer, parameter :: symmetry_group_order = size(symmetry_group, 3)
 
 contains
 
@@ -1319,9 +1320,9 @@ contains
                 & trim(adjustl(line))
         write(line,*) num_points
         write(*,*) "Number of movable points: ", trim(adjustl(line))
-        write(line,*) size(external_points, 2)
+        write(line,*) num_external_points
         write(*,*) "Number of fixed points: ", trim(adjustl(line))
-        write(line,*) size(symmetry_group, 3)
+        write(line,*) symmetry_group_order
         write(*,*) "Order of symmetry group: ", trim(adjustl(line))
         write(line,*) print_time
         write(*,*) "Terminal output frequency: every ", &
@@ -1371,18 +1372,81 @@ contains
     end subroutine constrain_points
 
 
-    pure real(dp) function riesz_energy(points)
+    pure real(dp) function pair_potential(r)
+        real(dp), intent(in) :: r
+
+        pair_potential = r**(-s)
+    end function pair_potential
+
+
+    pure real(dp) function pair_potential_derivative(r)
+        real(dp), intent(in) :: r
+
+        pair_potential_derivative = -s * r**(-s - 1.0d0)
+    end function pair_potential_derivative
+
+
+    pure subroutine add_pair_energy(displ, ener)
+        real(dp), intent(in) :: displ(d + 1)
+        real(dp), intent(inout) :: ener
+
+        ener = ener + pair_potential(norm2(displ))
+    end subroutine add_pair_energy
+
+
+    pure subroutine add_pair_energy_force(displ, ener, force)
+        real(dp), intent(in) :: displ(d + 1)
+        real(dp), intent(inout) :: ener, force(d + 1)
+
+        real(dp) :: r
+
+        r = norm2(displ)
+        ener = ener + pair_potential(r)
+        force = force + (pair_potential_derivative(r) / r) * displ
+    end subroutine add_pair_energy_force
+
+
+    pure real(dp) function riesz_energy(points) result (ener)
         real(dp), intent(in) :: points(d + 1, num_points)
 
-        integer :: i, j
+        integer :: p, q, beta, delta
+        real(dp) :: current_point(d + 1), displ(d + 1)
 
-        riesz_energy = 0.0d0
-        do j = 1, num_points
-            do i = 1, j - 1
-                riesz_energy = riesz_energy + &
-                        & norm2(points(:,i) - points(:,j))**(-s)
+        ener = 0.0d0
+        do p = 1, num_points
+            do beta = 1, symmetry_group_order
+                current_point = matmul(symmetry_group(:,:,beta), points(:,p))
+                do q = 1, num_external_points
+                    displ = current_point - external_points(:,q)
+                    call add_pair_energy(displ, ener)
+                end do
+                do delta = 1, beta - 1
+                    displ = current_point - &
+                        & matmul(symmetry_group(:,:,delta), points(:,p))
+                    call add_pair_energy(displ, ener)
+                end do
+                do delta = beta + 1, symmetry_group_order
+                    displ = current_point - &
+                        & matmul(symmetry_group(:,:,delta), points(:,p))
+                    call add_pair_energy(displ, ener)
+                end do
+                do q = 1, p - 1
+                    do delta = 1, symmetry_group_order
+                        displ = current_point - &
+                            & matmul(symmetry_group(:,:,delta), points(:,q))
+                        call add_pair_energy(displ, ener)
+                    end do
+                end do
+                do q = p + 1, num_points
+                    do delta = 1, symmetry_group_order
+                        displ = current_point - &
+                            & matmul(symmetry_group(:,:,delta), points(:,q))
+                        call add_pair_energy(displ, ener)
+                    end do
+                end do
             end do
         end do
+        ener = 0.5d0 * ener
     end function riesz_energy
 
 
@@ -1390,28 +1454,51 @@ contains
         real(dp), intent(in) :: points(d + 1, num_points)
         real(dp), intent(out) :: ener, grad(d + 1, num_points)
 
-        real(dp) :: displ(d + 1), dist_sq, term
-        integer :: i, j
+        integer :: p, q, beta, delta
+        real(dp) :: current_point(d + 1), displ(d + 1)
+        real(dp) :: grad_ext(d + 1), grad_self(d + 1), grad_other(d + 1)
 
         ener = 0.0d0
-        do j = 1, num_points
-            grad(:,j) = 0.0d0
-            do i = 1, j - 1
-                displ = points(:,i) - points(:,j)
-                dist_sq = dot_product(displ, displ)
-                term = dist_sq**(-0.5d0 * s)
-                ener = ener + term
-                term = s * term / dist_sq
-                grad(:,j) = grad(:,j) + term * displ
+        do p = 1, num_points
+            grad(:,p) = 0.0d0
+            do beta = 1, symmetry_group_order
+                current_point = matmul(symmetry_group(:,:,beta), points(:,p))
+                grad_ext = 0.0d0
+                do q = 1, num_external_points
+                    displ = current_point - external_points(:,q)
+                    call add_pair_energy_force(displ, ener, grad_ext)
+                end do
+                grad_self = 0.0d0
+                do delta = 1, beta - 1
+                    displ = current_point - &
+                        & matmul(symmetry_group(:,:,delta), points(:,p))
+                    call add_pair_energy_force(displ, ener, grad_self)
+                end do
+                do delta = beta + 1, symmetry_group_order
+                    displ = current_point - &
+                        & matmul(symmetry_group(:,:,delta), points(:,p))
+                    call add_pair_energy_force(displ, ener, grad_self)
+                end do
+                grad_other = 0.0d0
+                do q = 1, p - 1
+                    do delta = 1, symmetry_group_order
+                        displ = current_point - &
+                            & matmul(symmetry_group(:,:,delta), points(:,q))
+                        call add_pair_energy_force(displ, ener, grad_other)
+                    end do
+                end do
+                do q = p + 1, num_points
+                    do delta = 1, symmetry_group_order
+                        displ = current_point - &
+                            & matmul(symmetry_group(:,:,delta), points(:,q))
+                        call add_pair_energy_force(displ, ener, grad_other)
+                    end do
+                end do
+                grad(:,p) = grad(:,p) + matmul(symmetry_group_inv(:,:,beta), &
+                    & grad_ext + grad_self + grad_other)
             end do
-            do i = j + 1, num_points
-                displ = points(:,i) - points(:,j)
-                term = s * norm2(displ)**(-s - 2.0d0)
-                grad(:,j) = grad(:,j) + term * displ
-            end do
-            grad(:,j) = grad(:,j) - &
-                & dot_product(grad(:,j), points(:,j)) * points(:,j)
         end do
+        ener = 0.5d0 * ener
     end subroutine riesz_energy_gradient
 
 end module sphere_riesz_energy
@@ -1670,7 +1757,7 @@ contains
     subroutine print_welcome_message
         write(*,*) " _____   _____"
         write(*,*) "|  __ \ / ____|                David Zhang"
-        write(*,*) "| |__) | |     _ __ ___  ___"
+        write(*,*) "| |__) | |     _ __ ___  ___    Symmetric"
         write(*,*) "|  ___/| |    | '__/ _ \/ _ \    B F G S"
         write(*,*) "| |    | |____| | |  __/ (_) |  Optimized"
         write(*,*) "|_|     \_____|_|  \___|\___/  For Spheres"
@@ -1683,10 +1770,10 @@ contains
         integer :: u
         logical :: ex
 
-        inquire(file="initial_configuration.txt", exist=ex)
+        inquire(file="initial_reduced_configuration.txt", exist=ex)
         if (ex) then
             write(*,*) "Loading initial point configuration from file..."
-            open(newunit=u, file="initial_configuration.txt")
+            open(newunit=u, file="initial_reduced_configuration.txt")
             read(u,*) points
             close(u)
         else
@@ -1734,7 +1821,7 @@ contains
         integer :: ticks, tick_rate
         call system_clock(ticks, tick_rate)
         current_time = real(ticks, dp) / real(tick_rate, dp)
-    end
+    end function current_time
 
 
     subroutine save_point_file(points, idx)
@@ -1742,9 +1829,9 @@ contains
         integer, intent(in) :: idx
 
         integer :: i, j, u
-        character(len=34) :: fname
+        character(len=42) :: fname
 
-        write(fname,"(a,i10.10,a)") "point_configuration_", idx, ".csv"
+        write(fname,"(a,i10.10,a)") "reduced_point_configuration_", idx, ".csv"
         open(file=fname, newunit=u)
         do j = 1, num_points
             do i = 1, d + 1
