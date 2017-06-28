@@ -18,6 +18,12 @@ del /Q *.mod 2> NUL
 del /Q src\*.mod 2> NUL
 del /Q *.obj 2> NUL
 
+ifort /Qopt-report:5 /warn:all /wrap-margin- /o bin\pcreo_sphere_gd_sym_hc /fast src\pcreo_sphere_gd_sym_hc.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
 ::~ ifort /Qopt-report:5 /warn:all /wrap-margin- /o bin\pcreo_sphere_gd_hc /fast src\pcreo_sphere_gd_hc.f90
 
 ::~ del /Q *.mod 2> NUL

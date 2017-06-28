@@ -31,5 +31,8 @@
 *.out
 *.app
 
+# Output Data
+*.csv
+
 # Intel Compiler Optimization Reports
 *.optrpt
