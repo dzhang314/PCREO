@@ -370,7 +370,7 @@ contains
         write(*,*) " _____   _____"
         write(*,*) "|  __ \ / ____|                David Zhang"
         write(*,*) "| |__) | |     _ __ ___  ___"
-        write(*,*) "|  ___/| |    | '__/ _ \/ _ \    B F G S"
+        write(*,*) "|  ___/| |    | '__/ _ \/ _ \  Grad. Desc."
         write(*,*) "| |    | |____| | |  __/ (_) |  Optimized"
         write(*,*) "|_|     \_____|_|  \___|\___/  For Spheres"
     end subroutine print_welcome_message
