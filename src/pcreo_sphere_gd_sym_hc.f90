@@ -1238,8 +1238,6 @@ contains
         real(dp), intent(in) :: source_pt(d + 1), target_pt(d + 1)
         real(dp), intent(inout) :: energy
 
-        real(dp) :: displacement(d + 1), r
-
         energy = energy + pair_potential(norm2(target_pt - source_pt))
     end subroutine add_pair_energy
 
@@ -1299,7 +1297,7 @@ contains
             end do
         end do
         riesz_energy = 0.5d0 * riesz_energy
-    end subroutine riesz_energy
+    end function riesz_energy
 
 
     pure subroutine riesz_energy_force(points, energy, force)
@@ -1311,7 +1309,7 @@ contains
 
         energy = 0.0d0
         do p = 1, num_points
-            grad(:,p) = 0.0d0
+            force(:,p) = 0.0d0
             do a = 1, symmetry_group_order
                 image_point = matmul(symmetry_group(:,:,a), points(:,p))
                 image_force = 0.0d0
@@ -1344,11 +1342,11 @@ contains
                             & image_point, energy, image_force)
                     end do
                 end do
-                grad(:,p) = grad(:,p) + &
+                force(:,p) = force(:,p) + &
                     & matmul(symmetry_group_inv(:,:,a), image_force)
             end do
-            grad(:,p) = grad(:,p) - &
-                & dot_product(grad(:,p), points(:,p)) * points(:,p)
+            force(:,p) = force(:,p) - &
+                & dot_product(force(:,p), points(:,p)) * points(:,p)
         end do
         energy = 0.5d0 * energy
     end subroutine riesz_energy_force
