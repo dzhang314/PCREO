@@ -1304,6 +1304,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         & (/ 3, 62 /))
 
     integer, parameter :: num_vars = (d + 1) * num_points
+    integer, parameter :: num_external_points = size(external_points, 2)
 
 contains
 
