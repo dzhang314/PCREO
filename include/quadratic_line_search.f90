@@ -26,7 +26,7 @@
         ! If the new energy is greater than the old energy, or worse, gives
         ! a non-finite (Inf/NaN) result, then we know our initial step size
         ! was too large.
-        if (new_energy > energy .or. .not. ieee_is_finite(new_energy)) then
+        if (new_energy > energy .or. new_energy /= new_energy) then
             do
                 ! Try taking a step of half the size. Does this result in a
                 ! decrease?
