@@ -1,4 +1,5 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
 ! pcreo - Point Configuration Riesz Energy Optimizer                           !
 !                                                                              !
 ! This program generates point configurations on (hyper)surfaces embedded in   !

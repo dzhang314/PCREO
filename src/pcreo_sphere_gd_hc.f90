@@ -1,4 +1,5 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
 ! pcreo_sphere_gd_hc - Point Configuration Riesz Energy Optimizer              !
 !                      Optimized for Use on Unit Hyperspheres                  !
 !                      Gradient Descent Version                                !
