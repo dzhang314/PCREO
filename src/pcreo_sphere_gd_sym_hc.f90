@@ -24,7 +24,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     integer, parameter :: d = 2
     integer, parameter :: num_points = 27
 
-    real(dp), parameter :: print_time = 0.1d0 ! print 10 times per second
+    real(dp), parameter :: print_time = 0.0d0 ! print 10 times per second
     real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
 
     include "../include/icosahedral_symmetry_group.f90"
@@ -287,6 +287,7 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         cur_time = current_time()
         if (cur_time - last_print_time >= print_time) then
             call print_optimization_status
+            write(*,*) riesz_energy(points)
             last_print_time = cur_time
         end if
         if (cur_time - last_save_time >= save_time) then
