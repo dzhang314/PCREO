@@ -20,12 +20,12 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     implicit none
     integer, parameter :: dp = selected_real_kind(15, 307)  ! IEEE double prec.
 
-    real(dp), parameter :: s = 1.0d0
+    real(dp), parameter :: s = 1.0_dp
     integer, parameter :: d = 2
     integer, parameter :: num_points = 27
 
-    real(dp), parameter :: print_time = 0.0d0 ! print 10 times per second
-    real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
+    real(dp), parameter :: print_time = 0.1_dp ! print 10 times per second
+    real(dp), parameter :: save_time = 15.0_dp ! save every 15 seconds
 
     include "../include/icosahedral_symmetry_group.f90"
     include "../include/icosahedron_vertices.f90"
@@ -85,9 +85,9 @@ contains
         real(dp) :: u(d + 1, num_points)
 
         call random_number(u)
-        points = sqrt(-2.0d0 * log(u))
+        points = sqrt(-2.0_dp * log(u))
         call random_number(u)
-        points = points * sin(4.0d0 * asin(1.0d0) * u)
+        points = points * sin(4.0_dp * asin(1.0_dp) * u)
     end subroutine random_normal_points
 
 
@@ -112,7 +112,7 @@ contains
     pure real(dp) function pair_potential_derivative(r)
         real(dp), intent(in) :: r
 
-        pair_potential_derivative = -s * r**(-s - 1.0d0)
+        pair_potential_derivative = -s * r**(-s - 1.0_dp)
     end function pair_potential_derivative
 
 
@@ -122,6 +122,14 @@ contains
 
         energy = energy + pair_potential(norm2(target_pt - source_pt))
     end subroutine add_pair_energy
+
+
+    pure subroutine add_pair_energy_2(source_pt, target_pt, energy)
+        real(dp), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(dp), intent(inout) :: energy
+
+        energy = energy + 2.0_dp * pair_potential(norm2(target_pt - source_pt))
+    end subroutine add_pair_energy_2
 
 
     pure subroutine add_pair_energy_force(source_pt, target_pt, energy, force)
@@ -137,15 +145,28 @@ contains
     end subroutine add_pair_energy_force
 
 
+    pure subroutine add_pair_energy_force_2(source_pt, target_pt, energy, force)
+        real(dp), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(dp), intent(inout) :: energy, force(d + 1)
+
+        real(dp) :: displacement(d + 1), r
+
+        displacement = target_pt - source_pt
+        r = norm2(displacement)
+        energy = energy + 2.0_dp * pair_potential(r)
+        force = force - (pair_potential_derivative(r) / r) * displacement
+    end subroutine add_pair_energy_force_2
+
+
     pure real(dp) function riesz_energy(points)
         real(dp), intent(in) :: points(d + 1, num_points)
 
         integer :: b, p, q
 
-        riesz_energy = 0.0d0
+        riesz_energy = 0.0_dp
         do p = 1, num_points
             do q = 1, num_external_points
-                call add_pair_energy( &
+                call add_pair_energy_2( &
                     & external_points(:,q), &
                     & points(:,p), riesz_energy)
             end do
@@ -170,7 +191,7 @@ contains
             end do
         end do
         riesz_energy = external_energy + &
-            & 0.5d0 * symmetry_group_order * riesz_energy
+            & 0.5_dp * symmetry_group_order * riesz_energy
     end function riesz_energy
 
 
@@ -180,11 +201,11 @@ contains
 
         integer :: b, p, q
 
-        energy = 0.0d0
+        energy = 0.0_dp
         do p = 1, num_points
-            force(:,p) = 0.0d0
+            force(:,p) = 0.0_dp
             do q = 1, num_external_points
-                call add_pair_energy_force( &
+                call add_pair_energy_force_2( &
                     & external_points(:,q), &
                     & points(:,p), energy, force(:,p))
             end do
@@ -211,7 +232,7 @@ contains
                 & dot_product(force(:,p), points(:,p)) * points(:,p)
         end do
         force = symmetry_group_order * force
-        energy = external_energy + 0.5d0 * symmetry_group_order * energy
+        energy = external_energy + 0.5_dp * symmetry_group_order * energy
     end subroutine riesz_energy_force
 
 end module sphere_riesz_energy
@@ -262,7 +283,7 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     write(*,*)
 
     ! TODO: Is there a more natural choice of initial step size?
-    step_size = 1.0d-5
+    step_size = 1.0E-10_dp
 
     iteration_count = 0
     cur_time = current_time()
@@ -273,7 +294,7 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_optimization_status
     do
         step_size = quadratic_line_search(points, energy, force, step_size)
-        if (step_size == 0.0d0) then
+        if (step_size == 0.0_dp) then
             call print_optimization_status
             call save_point_file(points, iteration_count)
             write(*,*) "Convergence has been achieved (up to numerical&
