@@ -18,17 +18,17 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     implicit none
-    integer, parameter :: dp = selected_real_kind(33)  ! IEEE double prec.
+    integer, parameter :: dp = selected_real_kind(15, 307)  ! IEEE double prec.
 
     real(dp), parameter :: s = 1.0d0
     integer, parameter :: d = 2
-    integer, parameter :: num_points = 22
+    integer, parameter :: num_points = 27
 
     real(dp), parameter :: print_time = 0.1d0 ! print 10 times per second
     real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
 
     include "../include/icosahedral_symmetry_group.f90"
-    include "../include/icosahedron_vertices_edges_faces.f90"
+    include "../include/icosahedron_vertices.f90"
 
     integer, parameter :: num_external_points = size(external_points, 2)
     integer, parameter :: symmetry_group_order = size(symmetry_group, 3)
@@ -48,8 +48,12 @@ contains
         write(*,*) "Number of movable points: ", trim(adjustl(line))
         write(line,*) num_external_points
         write(*,*) "Number of fixed points: ", trim(adjustl(line))
+        write(line,*) external_energy
+        write(*,*) "Fixed point energy: ", trim(adjustl(line))
         write(line,*) symmetry_group_order
         write(*,*) "Order of symmetry group: ", trim(adjustl(line))
+        write(line,*) num_external_points + symmetry_group_order * num_points
+        write(*,*) "Total number of points: ", trim(adjustl(line))
         write(line,*) print_time
         write(*,*) "Terminal output frequency: every ", &
                 & trim(adjustl(line)), " seconds"
@@ -133,103 +137,6 @@ contains
     end subroutine add_pair_energy_force
 
 
-!~     pure real(dp) function riesz_energy(points)
-!~         real(dp), intent(in) :: points(d + 1, num_points)
-
-!~         integer :: a, b, p, q
-!~         real(dp) :: image_point(d + 1)
-
-!~         riesz_energy = 0.0d0
-!~         do p = 1, num_points
-!~             do a = 1, symmetry_group_order
-!~                 image_point = matmul(symmetry_group(:,:,a), points(:,p))
-!~                 do q = 1, num_external_points
-!~                     call add_pair_energy( &
-!~                         & external_points(:,q), &
-!~                         & image_point, riesz_energy)
-!~                 end do
-!~                 do b = 1, a - 1
-!~                     call add_pair_energy( &
-!~                         & matmul(symmetry_group(:,:,b), points(:,p)), &
-!~                         & image_point, riesz_energy)
-!~                 end do
-!~                 do b = a + 1, symmetry_group_order
-!~                     call add_pair_energy( &
-!~                         & matmul(symmetry_group(:,:,b), points(:,p)), &
-!~                         & image_point, riesz_energy)
-!~                 end do
-!~                 do q = 1, p - 1
-!~                     do b = 1, symmetry_group_order
-!~                         call add_pair_energy( &
-!~                             & matmul(symmetry_group(:,:,b), points(:,q)), &
-!~                             & image_point, riesz_energy)
-!~                     end do
-!~                 end do
-!~                 do q = p + 1, num_points
-!~                     do b = 1, symmetry_group_order
-!~                         call add_pair_energy( &
-!~                             & matmul(symmetry_group(:,:,b), points(:,q)), &
-!~                             & image_point, riesz_energy)
-!~                     end do
-!~                 end do
-!~             end do
-!~         end do
-!~         riesz_energy = 0.5d0 * riesz_energy
-!~     end function riesz_energy
-
-
-!~     pure subroutine riesz_energy_force(points, energy, force)
-!~         real(dp), intent(in) :: points(d + 1, num_points)
-!~         real(dp), intent(out) :: energy, force(d + 1, num_points)
-
-!~         integer :: a, b, p, q
-!~         real(dp) :: image_point(d + 1), image_force(d + 1)
-
-!~         energy = 0.0d0
-!~         do p = 1, num_points
-!~             force(:,p) = 0.0d0
-!~             do a = 1, symmetry_group_order
-!~                 image_point = matmul(symmetry_group(:,:,a), points(:,p))
-!~                 image_force = 0.0d0
-!~                 do q = 1, num_external_points
-!~                     call add_pair_energy_force( &
-!~                         & external_points(:,q), &
-!~                         & image_point, energy, image_force)
-!~                 end do
-!~                 do b = 1, a - 1
-!~                     call add_pair_energy_force( &
-!~                         & matmul(symmetry_group(:,:,b), points(:,p)), &
-!~                         & image_point, energy, image_force)
-!~                 end do
-!~                 do b = a + 1, symmetry_group_order
-!~                     call add_pair_energy_force( &
-!~                         & matmul(symmetry_group(:,:,b), points(:,p)), &
-!~                         & image_point, energy, image_force)
-!~                 end do
-!~                 do q = 1, p - 1
-!~                     do b = 1, symmetry_group_order
-!~                         call add_pair_energy_force( &
-!~                             & matmul(symmetry_group(:,:,b), points(:,q)), &
-!~                             & image_point, energy, image_force)
-!~                     end do
-!~                 end do
-!~                 do q = p + 1, num_points
-!~                     do b = 1, symmetry_group_order
-!~                         call add_pair_energy_force( &
-!~                             & matmul(symmetry_group(:,:,b), points(:,q)), &
-!~                             & image_point, energy, image_force)
-!~                     end do
-!~                 end do
-!~                 force(:,p) = force(:,p) + &
-!~                     & matmul(symmetry_group_inv(:,:,a), image_force)
-!~             end do
-!~             force(:,p) = force(:,p) - &
-!~                 & dot_product(force(:,p), points(:,p)) * points(:,p)
-!~         end do
-!~         energy = 0.5d0 * energy
-!~     end subroutine riesz_energy_force
-
-
     pure real(dp) function riesz_energy(points)
         real(dp), intent(in) :: points(d + 1, num_points)
 
@@ -262,7 +169,8 @@ contains
                 end do
             end do
         end do
-        riesz_energy = 0.5d0 * riesz_energy
+        riesz_energy = external_energy + &
+            & 0.5d0 * symmetry_group_order * riesz_energy
     end function riesz_energy
 
 
@@ -302,7 +210,8 @@ contains
             force(:,p) = force(:,p) - &
                 & dot_product(force(:,p), points(:,p)) * points(:,p)
         end do
-        energy = 0.5d0 * energy
+        force = symmetry_group_order * force
+        energy = external_energy + 0.5d0 * symmetry_group_order * energy
     end subroutine riesz_energy_force
 
 end module sphere_riesz_energy
