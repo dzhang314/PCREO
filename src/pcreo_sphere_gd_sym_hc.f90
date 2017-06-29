@@ -195,7 +195,7 @@ contains
     end function riesz_energy
 
 
-    subroutine riesz_energy_force(points, energy, force)
+    pure subroutine riesz_energy_force(points, energy, force)
         real(dp), intent(in) :: points(d + 1, num_points)
         real(dp), intent(out) :: energy, force(d + 1, num_points)
 
@@ -308,7 +308,6 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         cur_time = current_time()
         if (cur_time - last_print_time >= print_time) then
             call print_optimization_status
-            write(*,*) riesz_energy(points)
             last_print_time = cur_time
         end if
         if (cur_time - last_save_time >= save_time) then
