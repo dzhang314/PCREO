@@ -8,6 +8,7 @@
         real(dp), dimension(d + 1, num_points) :: new_points, newer_points
         real(dp) :: step_size, new_energy, newer_energy
         integer :: num_increases
+
         ! The goal of quadratic line search is to find three points, a, b, c,
         ! such that a < b < c and f(a) > f(b) < f(c). We say that such a
         ! triplet of points is "bowl-shaped." Once we have three bowl-shaped
