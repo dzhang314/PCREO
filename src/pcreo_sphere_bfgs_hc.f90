@@ -54,11 +54,11 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     integer, parameter :: dp = selected_real_kind(15, 307)  ! IEEE double prec.
 
     real(dp), parameter :: s = 1.0d0
-    integer, parameter :: d = 2
-    integer, parameter :: num_points = 1632
+    integer, parameter :: d = 3
+    integer, parameter :: num_points = 1000
 
-    real, parameter :: print_time = 0.1 ! print 10 times per second
-    real, parameter :: save_time = 15.0 ! save every 15 seconds
+    real(dp), parameter :: print_time = 0.1d0 ! print 10 times per second
+    real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
 
     integer, parameter :: num_vars = (d + 1) * num_points
 
@@ -229,8 +229,9 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     real(dp), dimension(d + 1, num_points) :: old_gradient, new_gradient
     ! Approximate inverse Hessian, calculated by BFGS
     real(dp) :: inv_hess(d + 1, num_points, d + 1, num_points), step_size
-    real(dp), dimension(d + 1, num_points) :: step_direction, delta_gradient
-    real(dp) :: last_print_time, last_save_time, cur_time
+    real(dp), dimension(d + 1, num_points) :: &
+        & old_step_direction, new_step_direction, delta_gradient
+    real(dp) :: step_angle, last_print_time, last_save_time, cur_time
     integer :: iteration_count
 
     call print_welcome_message
@@ -243,7 +244,7 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     ! Initialize inv_hess to identity matrix
     call dlaset('U', num_vars, num_vars, 0.0d0, 1.0d0, inv_hess, num_vars)
     ! TODO: Is there a more natural choice of initial step size?
-    step_size = 1.0d-5
+    step_size = 1.0d-10
 
     iteration_count = 0
     cur_time = current_time()
@@ -255,9 +256,16 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do
         ! Multiply inverse hessian by negative gradient to obtain step direction
         call dsymv('U', num_vars, -1.0d0, inv_hess, num_vars, &
-                & old_gradient, 1, 0.0d0, step_direction, 1)
+                & old_gradient, 1, 0.0d0, new_step_direction, 1)
+        if (iteration_count > 0) then
+            step_angle = sum(old_step_direction * new_step_direction) / &
+                    & (norm2(old_step_direction) * norm2(new_step_direction))
+        else
+            step_angle = 0.0d0
+        end if
+        old_step_direction = new_step_direction
         step_size = quadratic_line_search(old_points, old_energy, &
-                & step_direction, step_size)
+                & old_step_direction, step_size)
         if (step_size == 0.0d0) then
             call print_optimization_status
             call save_point_file(old_points, iteration_count)
@@ -265,12 +273,12 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     & round-off error). Exiting."
             stop
         end if
-        new_points = old_points + step_size * step_direction
+        new_points = old_points + step_size * old_step_direction
         call constrain_points(new_points)
         call riesz_energy_gradient(new_points, new_energy, new_gradient)
         delta_gradient = new_gradient - old_gradient
         call update_inverse_hessian(inv_hess, delta_gradient, &
-                & step_size, step_direction)
+                & step_size, old_step_direction)
         old_points = new_points
         old_energy = new_energy
         old_gradient = new_gradient
@@ -334,7 +342,8 @@ contains
         write(*,'(ES23.15E3,A)',advance="no") old_energy, " |"
         write(*,'(ES23.15E3,A)',advance="no") &
                 & norm2(old_gradient) / sqrt(real(num_points, dp)), " |"
-        write(*,'(ES23.15E3,A)') step_size
+        write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
+        write(*,'(ES23.15E3)') step_angle
     end subroutine print_optimization_status
 
 
@@ -370,7 +379,7 @@ contains
         do j = 1, num_points
             do i = 1, d + 1
                 if (i > 1) write(u,'(A)',advance="no") ", "
-                write(u,'(ES23.15E3)',advance="no") points(i,j)
+                write(u,'(SP,ES23.15E3)',advance="no") points(i,j)
             end do
             write(u,*)
         end do

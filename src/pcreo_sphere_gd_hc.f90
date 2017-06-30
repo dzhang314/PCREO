@@ -42,11 +42,11 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     integer, parameter :: dp = selected_real_kind(15, 307)  ! IEEE double prec.
 
     real(dp), parameter :: s = 1.0d0
-    integer, parameter :: d = 2
-    integer, parameter :: num_points = 1632
+    integer, parameter :: d = 3
+    integer, parameter :: num_points = 1000
 
-    real, parameter :: print_time = 0.1 ! print 10 times per second
-    real, parameter :: save_time = 15.0 ! save every 15 seconds
+    real(dp), parameter :: print_time = 0.1d0 ! print 10 times per second
+    real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
 
 contains
 
@@ -187,8 +187,8 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     use line_search
     implicit none
 
-    real(dp), dimension(d + 1, num_points) :: points, force
-    real(dp) :: energy, step_size
+    real(dp), dimension(d + 1, num_points) :: points, old_force, new_force
+    real(dp) :: energy, step_size, force_angle
     real(dp) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
 
@@ -196,11 +196,11 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     write(*,*)
     call print_parameters
     write(*,*)
-    call initialize_point_configuration(points, energy, force)
+    call initialize_point_configuration(points, energy, old_force)
     write(*,*)
 
     ! TODO: Is there a more natural choice of initial step size?
-    step_size = 1.0d-5
+    step_size = 1.0d-10
 
     iteration_count = 0
     cur_time = current_time()
@@ -210,7 +210,7 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_table_header
     call print_optimization_status
     do
-        step_size = quadratic_line_search(points, energy, force, step_size)
+        step_size = quadratic_line_search(points, energy, old_force, step_size)
         if (step_size == 0.0d0) then
             call print_optimization_status
             call save_point_file(points, iteration_count)
@@ -218,9 +218,12 @@ program pcreo_sphere_gd_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     & round-off error). Exiting."
             stop
         end if
-        points = points + step_size * force
+        points = points + step_size * old_force
         call constrain_points(points)
-        call riesz_energy_force(points, energy, force)
+        call riesz_energy_force(points, energy, new_force)
+        force_angle = sum(old_force * new_force) / &
+            & (norm2(old_force) * norm2(new_force))
+        old_force = new_force
         iteration_count = iteration_count + 1
         cur_time = current_time()
         if (cur_time - last_print_time >= print_time) then
@@ -270,7 +273,7 @@ contains
 
     subroutine print_table_header
         write(*,'(A)') "#Iterations| Riesz s-energy         |&
-                & RMS Gradient           | Step size"
+                & RMS Force              | Step size"
         write(*,'(A)') "-----------+------------------------+&
                 &------------------------+------------------------"
     end subroutine print_table_header
@@ -280,8 +283,9 @@ contains
         write(*,'(I10,A)',advance="no") iteration_count, " |"
         write(*,'(ES23.15E3,A)',advance="no") energy, " |"
         write(*,'(ES23.15E3,A)',advance="no") &
-                & norm2(force) / sqrt(real(num_points, dp)), " |"
-        write(*,'(ES23.15E3,A)') step_size
+                & norm2(old_force) / sqrt(real(num_points, dp)), " |"
+        write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
+        write(*,'(ES23.15E3)') force_angle
     end subroutine print_optimization_status
 
 
@@ -317,7 +321,7 @@ contains
         do j = 1, num_points
             do i = 1, d + 1
                 if (i > 1) write(u,'(A)',advance="no") ", "
-                write(u,'(ES23.15E3)',advance="no") points(i,j)
+                write(u,'(SP,ES23.15E3)',advance="no") points(i,j)
             end do
             write(u,*)
         end do
