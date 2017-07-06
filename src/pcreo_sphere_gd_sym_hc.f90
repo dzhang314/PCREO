@@ -22,7 +22,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     real(dp), parameter :: s = 1.0_dp
     integer, parameter :: d = 2
-    integer, parameter :: num_points = 27
+    integer, parameter :: num_points = 100
 
     real(dp), parameter :: print_time = 0.1_dp ! print 10 times per second
     real(dp), parameter :: save_time = 15.0_dp ! save every 15 seconds

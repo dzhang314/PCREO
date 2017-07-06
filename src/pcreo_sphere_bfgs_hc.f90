@@ -59,6 +59,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     real(dp), parameter :: print_time = 0.1d0 ! print 10 times per second
     real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
+    logical, parameter :: track_step_angle = .false.
 
     integer, parameter :: num_vars = (d + 1) * num_points
 
@@ -257,11 +258,13 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ! Multiply inverse hessian by negative gradient to obtain step direction
         call dsymv('U', num_vars, -1.0d0, inv_hess, num_vars, &
                 & old_gradient, 1, 0.0d0, new_step_direction, 1)
-        if (iteration_count > 0) then
-            step_angle = sum(old_step_direction * new_step_direction) / &
-                    & (norm2(old_step_direction) * norm2(new_step_direction))
-        else
-            step_angle = 0.0d0
+        if (track_step_angle) then
+            if (iteration_count > 0) then
+                step_angle = sum(old_step_direction * new_step_direction) / &
+                        & (norm2(old_step_direction) * norm2(new_step_direction))
+            else
+                step_angle = 0.0d0
+            end if
         end if
         old_step_direction = new_step_direction
         step_size = quadratic_line_search(old_points, old_energy, &
@@ -342,8 +345,12 @@ contains
         write(*,'(ES23.15E3,A)',advance="no") old_energy, " |"
         write(*,'(ES23.15E3,A)',advance="no") &
                 & norm2(old_gradient) / sqrt(real(num_points, dp)), " |"
-        write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
-        write(*,'(ES23.15E3)') step_angle
+        if (track_step_angle) then
+            write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
+            write(*,'(ES23.15E3)') step_angle
+        else
+            write(*,'(ES23.15E3)') step_size
+        end if
     end subroutine print_optimization_status
 
 
