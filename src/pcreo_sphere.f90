@@ -488,21 +488,20 @@ module optimization_subroutines !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 contains
 
     subroutine bfgs_update_inverse_hessian( &
-            & inv_hess, delta_gradient, step_size, step_direction)
+            & inv_hess, delta_points, delta_gradient)
         real(rk), intent(inout) :: &
                 & inv_hess(d + 1, num_points, d + 1, num_points)
-        real(rk), intent(in) :: delta_gradient(d + 1, num_points)
-        real(rk), intent(in) :: step_size, step_direction(d + 1, num_points)
+        real(rk), intent(in), dimension(d + 1, num_points) :: &
+                & delta_points, delta_gradient
 
         real(rk) :: lambda, theta, sigma, kappa(d + 1, num_points)
 
-        lambda = step_size * dot_product_2(delta_gradient, step_direction)
+        lambda = dot_product_2(delta_gradient, delta_points)
         call matrix_multiply_42(kappa, inv_hess, delta_gradient)
         theta = dot_product_2(delta_gradient, kappa)
         sigma = (lambda + theta) / (lambda * lambda)
-        kappa = kappa - (0.5_rk * step_size * lambda * sigma) * step_direction
-        call symmetric_update_4(inv_hess, -step_size / lambda, &
-                              & kappa, step_direction)
+        kappa = kappa - (0.5_rk * lambda * sigma) * delta_points
+        call symmetric_update_4(inv_hess, -1 / lambda, kappa, delta_points)
     end subroutine bfgs_update_inverse_hessian
 
 
@@ -643,64 +642,6 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-#ifdef PCREO_GRAD_DESC
-
-    use constants
-    use sphere_riesz_energy
-    use line_search
-    implicit none
-
-    real(dp), dimension(d + 1, num_points) :: points, old_force, new_force
-    real(dp) :: energy, step_size, force_angle
-    real(dp) :: last_print_time, last_save_time, cur_time
-    integer :: iteration_count
-
-    call print_welcome_message
-    write(*,*)
-    call print_parameters
-    write(*,*)
-    call initialize_point_configuration(points, energy, old_force)
-    write(*,*)
-
-    ! TODO: Is there a more natural choice of initial step size?
-    step_size = 1.0d-10
-
-    iteration_count = 0
-    cur_time = current_time()
-    last_print_time = cur_time
-    last_save_time = cur_time
-
-    call print_table_header
-    call print_optimization_status
-    do
-        step_size = quadratic_line_search(points, energy, old_force, step_size)
-        if (step_size == 0.0d0) then
-            call print_optimization_status
-            call save_point_file(points, iteration_count)
-            write(*,*) "Convergence has been achieved (up to numerical&
-                    & round-off error). Exiting."
-            stop
-        end if
-        points = points + step_size * old_force
-        call constrain_points(points)
-        call riesz_energy_force(points, energy, new_force)
-        force_angle = sum(old_force * new_force) / &
-            & (norm2(old_force) * norm2(new_force))
-        old_force = new_force
-        iteration_count = iteration_count + 1
-        cur_time = current_time()
-        if (cur_time - last_print_time >= print_time) then
-            call print_optimization_status
-            last_print_time = cur_time
-        end if
-        if (cur_time - last_save_time >= save_time) then
-            call save_point_file(points, iteration_count)
-            last_save_time = cur_time
-        end if
-    end do
-
-#else
-
     use constants
     use sphere_riesz_energy
     use linear_algebra_4
@@ -709,29 +650,39 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     use pcreo_utilities
     implicit none
 
-    real(rk), dimension(d + 1, num_points) :: old_points, new_points
-    real(rk) :: old_energy, new_energy
-    real(rk), dimension(d + 1, num_points) :: old_gradient, new_gradient
-    ! Approximate inverse Hessian, calculated by BFGS
-    real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points), step_size
-    real(rk), dimension(d + 1, num_points) :: step_direction, delta_gradient
+    real(rk) :: points(d + 1, num_points)
+    real(rk) :: energy, force(d + 1, num_points)
+    real(rk) :: step_size
     real(rk) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
 
+#ifdef PCREO_GRAD_DESC
 #ifdef PCREO_TRACK_ANGLE
     real(rk) :: step_angle
-    real(rk), dimension(d + 1, num_points) :: new_step_direction
+    real(rk) :: new_force(d + 1, num_points)
+#endif
+#else
+    real(rk) :: new_points(d + 1, num_points)
+    real(rk) :: new_energy, new_force(d + 1, num_points)
+    real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points)
+    real(rk) :: step_direction(d + 1, num_points)
+    real(rk), dimension(d + 1, num_points) :: delta_points, delta_gradient
+#ifdef PCREO_TRACK_ANGLE
+    real(rk) :: step_angle
+    real(rk) :: new_step_direction(d + 1, num_points)
+#endif
 #endif
 
     call print_welcome_message
     write(*,*)
     call print_parameters
     write(*,*)
-    call initialize_point_configuration(old_points, old_energy, old_gradient)
+    call initialize_point_configuration(points, energy, force)
+#ifndef PCREO_GRAD_DESC
+    call identity_matrix_4(inv_hess)
+#endif
     write(*,*)
 
-    ! Initialize inv_hess to identity matrix
-    call identity_matrix_4(inv_hess)
     ! TODO: Is there a more natural choice of initial step size?
     step_size = 1.0E-10_rk
 
@@ -742,10 +693,30 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     call print_table_header
     call print_optimization_status
+
     do
+#ifdef PCREO_GRAD_DESC
+
+        step_size = quadratic_line_search(points, energy, force, step_size)
+        if (step_size == 0.0_rk) then
+            call print_optimization_status
+            call save_point_file(points, iteration_count)
+            write(*,*) "Convergence has been achieved (up to numerical&
+                    & round-off error). Exiting."
+            stop
+        end if
+        points = points + step_size * force
+        call constrain_points(points)
+        call riesz_energy_force(points, energy, new_force)
+        step_angle = sum(force * new_force) / &
+            & (norm2(force) * norm2(new_force))
+        force = new_force
+
+#else
+
 #ifdef PCREO_TRACK_ANGLE
-        ! Multiply inverse hessian by negative gradient to obtain step direction
-        call matrix_multiply_neg_42(new_step_direction, inv_hess, old_gradient)
+        ! Multiply inverse hessian by force to obtain step direction
+        call matrix_multiply_42(new_step_direction, inv_hess, force)
         if (iteration_count > 0) then
             step_angle = sum(step_direction * new_step_direction) / &
                     & (norm2(step_direction) * norm2(new_step_direction))
@@ -755,26 +726,30 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         step_direction = new_step_direction
 #else
         ! Multiply inverse hessian by negative gradient to obtain step direction
-        call matrix_multiply_neg_42(step_direction, inv_hess, old_gradient)
+        call matrix_multiply_42(step_direction, inv_hess, force)
 #endif
-        step_size = quadratic_line_search(old_points, old_energy, &
+        step_size = quadratic_line_search(points, energy, &
                 & step_direction, step_size)
         if (step_size == 0.0_rk) then
             call print_optimization_status
-            call save_point_file(old_points, iteration_count)
+            call save_point_file(points, iteration_count)
             write(*,*) "Convergence has been achieved (up to numerical&
                     & round-off error). Exiting."
             stop
         end if
-        new_points = old_points + step_size * step_direction
+        new_points = points + step_size * step_direction
         call constrain_points(new_points)
-        call riesz_energy_gradient(new_points, new_energy, new_gradient)
-        delta_gradient = new_gradient - old_gradient
+        delta_points = new_points - points
+        call riesz_energy_force(new_points, new_energy, new_force)
+        delta_gradient = force - new_force
         call bfgs_update_inverse_hessian( &
-                & inv_hess, delta_gradient, step_size, step_direction)
-        old_points = new_points
-        old_energy = new_energy
-        old_gradient = new_gradient
+                & inv_hess, delta_points, delta_gradient)
+        points = new_points
+        energy = new_energy
+        force = new_force
+
+#endif
+
         iteration_count = iteration_count + 1
         cur_time = current_time()
         if (cur_time - last_print_time >= print_time) then
@@ -782,18 +757,16 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             last_print_time = cur_time
         end if
         if (cur_time - last_save_time >= save_time) then
-            call save_point_file(old_points, iteration_count)
+            call save_point_file(points, iteration_count)
             last_save_time = cur_time
         end if
     end do
 
-#endif
-
 contains
 
-    subroutine initialize_point_configuration(points, energy, gradient)
+    subroutine initialize_point_configuration(points, energy, force)
         real(rk), intent(out) :: points(d + 1, num_points)
-        real(rk), intent(out) :: energy, gradient(d + 1, num_points)
+        real(rk), intent(out) :: energy, force(d + 1, num_points)
         integer :: u
         logical :: ex
 
@@ -809,16 +782,16 @@ contains
             call random_normal_points(points)
         end if
         call constrain_points(points)
-        call riesz_energy_gradient(points, energy, gradient)
+        call riesz_energy_force(points, energy, force)
         write(*,*) "Point configuration initialized."
     end subroutine initialize_point_configuration
 
 
     subroutine print_optimization_status
         write(*,'(I10,A)',advance="no") iteration_count, " |"
-        write(*,'('//rf//',A)',advance="no") old_energy, " |"
+        write(*,'('//rf//',A)',advance="no") energy, " |"
         write(*,'('//rf//',A)',advance="no") &
-                & norm2(old_gradient) / sqrt(real(num_points, rk)), " |"
+                & norm2(force) / sqrt(real(num_points, rk)), " |"
 #ifdef PCREO_TRACK_ANGLE
         write(*,'('//rf//',A)',advance="no") step_size, " |"
         write(*,'('//rf//')') step_angle

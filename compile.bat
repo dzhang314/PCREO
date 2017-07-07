@@ -6,6 +6,16 @@ del /Q *.obj 2> NUL
 del /Q bin\*.exe 2> NUL
 del /Q *.optrpt 2> NUL
 
+ifort ^
+/warn:all /wrap-margin- /fast ^
+/o bin\pcreo_sphere_gd ^
+/fpp /DPCREO_GRAD_DESC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
 ifort /Qmkl /I"%MKLROOT%"\include ^
 /warn:all /wrap-margin- /fast ^
 /o bin\pcreo_sphere_bfgs_mkl ^
