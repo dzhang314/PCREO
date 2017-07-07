@@ -1,3 +1,4 @@
+#define PCREO_USE_MKL
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
 ! pcreo_sphere_bfgs_hc - Point Configuration Riesz Energy Optimizer            !
@@ -52,7 +53,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     implicit none
 
 #ifdef PCREO_USE_MKL
-    include "mkl_blas.fi"
+#include "mkl_blas.fi"
     integer, parameter :: rk = selected_real_kind(15, 307)  ! IEEE double prec.
 #else
     integer, parameter :: sp = selected_real_kind(6, 37)    ! IEEE single prec.
@@ -225,6 +226,30 @@ contains
         end do
 #endif
     end subroutine matrix_multiply_42
+
+
+    subroutine matrix_multiply_neg_42(c, A, b)
+        real(rk), intent(out) :: c(d + 1, num_points)
+        real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(in) :: b(d + 1, num_points)
+
+#ifdef PCREO_USE_MKL
+        call dsymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
+#else
+        integer :: i, j, k, l
+
+        do j = 1, num_points
+            do i = 1, d + 1
+                c(i,j) = 0.0_rk
+                do l = 1, num_points
+                    do k = 1, d + 1
+                        c(i,j) = c(i,j) - A(k,l,i,j) * b(k,l)
+                    end do
+                end do
+            end do
+        end do
+#endif
+    end subroutine matrix_multiply_neg_42
 
 
     subroutine symmetric_update_4(A, c, x, y)

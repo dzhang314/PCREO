@@ -1,12 +1,12 @@
-    pure real(dp) function quadratic_line_search(points, energy, &
+    pure real(rk) function quadratic_line_search(points, energy, &
             & step_direction, initial_step_size) result (optimal_step_size)
-        real(dp), intent(in) :: points(d + 1, num_points)
-        real(dp), intent(in) :: energy
-        real(dp), intent(in) :: step_direction(d + 1, num_points)
-        real(dp), intent(in) :: initial_step_size
+        real(rk), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(in) :: energy
+        real(rk), intent(in) :: step_direction(d + 1, num_points)
+        real(rk), intent(in) :: initial_step_size
 
-        real(dp), dimension(d + 1, num_points) :: new_points, newer_points
-        real(dp) :: step_size, new_energy, newer_energy
+        real(rk), dimension(d + 1, num_points) :: new_points, newer_points
+        real(rk) :: step_size, new_energy, newer_energy
         integer :: num_increases
 
         ! The goal of quadratic line search is to find three points, a, b, c,
