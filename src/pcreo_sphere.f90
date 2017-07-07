@@ -502,7 +502,7 @@ module linear_algebra_4 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 contains
 
     real(rk) function dot_product_2(v, w) result (dot)
-        real(rk), intent(in), dimension(d + 1, num_points) :: v, w
+        real(rk), intent(in), contiguous, dimension(d + 1, num_points) :: v, w
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         dot = sdot(num_vars, v, 1, w, 1)
@@ -522,9 +522,9 @@ contains
 
 
     subroutine matrix_multiply_42(c, A, b)
-        real(rk), intent(out) :: c(d + 1, num_points)
-        real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
-        real(rk), intent(in) :: b(d + 1, num_points)
+        real(rk), intent(out), contiguous :: c(d + 1, num_points)
+        real(rk), intent(in), contiguous :: &
+                & A(d + 1, num_points, d + 1, num_points), b(d + 1, num_points)
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
@@ -547,35 +547,12 @@ contains
     end subroutine matrix_multiply_42
 
 
-    subroutine matrix_multiply_neg_42(c, A, b)
-        real(rk), intent(out) :: c(d + 1, num_points)
-        real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
-        real(rk), intent(in) :: b(d + 1, num_points)
-
-#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
-        call ssymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
-        call dsymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#else
-        integer :: i, j, k, l
-
-        do j = 1, num_points
-            do i = 1, d + 1
-                c(i,j) = 0.0_rk
-                do l = 1, num_points
-                    do k = 1, d + 1
-                        c(i,j) = c(i,j) - A(k,l,i,j) * b(k,l)
-                    end do
-                end do
-            end do
-        end do
-#endif
-    end subroutine matrix_multiply_neg_42
-
-
     subroutine symmetric_update_4(A, c, x, y)
-        real(rk), intent(inout) :: A(d + 1, num_points, d + 1, num_points)
-        real(rk), intent(in) :: c, x(d + 1, num_points), y(d + 1, num_points)
+        real(rk), intent(inout), contiguous :: &
+                & A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(in) :: c
+        real(rk), intent(in), contiguous :: &
+                & x(d + 1, num_points), y(d + 1, num_points)
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
@@ -593,7 +570,8 @@ contains
 
 
     subroutine identity_matrix_4(A)
-        real(rk), intent(out) :: A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(out), contiguous :: &
+                & A(d + 1, num_points, d + 1, num_points)
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call slaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
