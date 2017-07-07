@@ -4,17 +4,6 @@ del /Q *.mod 2> NUL
 del /Q src\*.mod 2> NUL
 del /Q *.obj 2> NUL
 del /Q bin\*.exe 2> NUL
-del /Q *.optrpt 2> NUL
-
-ifort ^
-/warn:all /wrap-margin- /fast ^
-/o bin\pcreo_sphere_gd ^
-/fpp /DPCREO_GRAD_DESC ^
-src\pcreo_sphere.f90
-
-del /Q *.mod 2> NUL
-del /Q src\*.mod 2> NUL
-del /Q *.obj 2> NUL
 
 ifort /Qmkl /I"%MKLROOT%"\include ^
 /warn:all /wrap-margin- /fast ^
@@ -115,3 +104,64 @@ src\pcreo_sphere.f90
 del /Q *.mod 2> NUL
 del /Q src\*.mod 2> NUL
 del /Q *.obj 2> NUL
+
+ifort ^
+/warn:all /wrap-margin- /fast ^
+/o bin\pcreo_sphere_gd_single ^
+/fpp /DPCREO_GRAD_DESC /DPCREO_SINGLE_PREC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
+ifort ^
+/warn:all /wrap-margin- /fast /Qparallel ^
+/o bin\pcreo_sphere_gd_single_par ^
+/fpp /DPCREO_GRAD_DESC /DPCREO_SINGLE_PREC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
+ifort ^
+/warn:all /wrap-margin- /fast ^
+/o bin\pcreo_sphere_gd ^
+/fpp /DPCREO_GRAD_DESC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
+ifort ^
+/warn:all /wrap-margin- /fast /Qparallel ^
+/o bin\pcreo_sphere_gd_par ^
+/fpp /DPCREO_GRAD_DESC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
+ifort ^
+/warn:all /wrap-margin- /fast ^
+/o bin\pcreo_sphere_gd_quad ^
+/fpp /DPCREO_GRAD_DESC /DPCREO_QUAD_PREC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
+ifort ^
+/warn:all /wrap-margin- /fast /Qparallel ^
+/o bin\pcreo_sphere_gd_quad_par ^
+/fpp /DPCREO_GRAD_DESC /DPCREO_QUAD_PREC ^
+src\pcreo_sphere.f90
+
+del /Q *.mod 2> NUL
+del /Q src\*.mod 2> NUL
+del /Q *.obj 2> NUL
+
