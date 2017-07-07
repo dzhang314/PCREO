@@ -815,13 +815,12 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_parameters
     write(*,*)
     call initialize_point_configuration(points, energy, force)
+    write(*,*)
+
 #ifdef PCREO_BFGS
     call identity_matrix_4(inv_hess)
     step_direction = force
 #endif
-    write(*,*)
-
-    ! TODO: Is there a more natural choice of initial step size?
     step_size = 1.0E-10_rk
 #ifdef PCREO_TRACK_ANGLE
     step_angle = 0.0_rk
@@ -844,7 +843,8 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         call constrain_points(points)
 #ifdef PCREO_TRACK_ANGLE
         call riesz_energy_force(points, energy, new_force)
-        step_angle = sum(force * new_force) / (norm2(force) * norm2(new_force))
+        step_angle = dot_product_2(force, new_force) / &
+                & (norm2(force) * norm2(new_force))
         force = new_force
 #else
         call riesz_energy_force(points, energy, force)
@@ -870,7 +870,7 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #ifdef PCREO_TRACK_ANGLE
         call matrix_multiply_42(new_step_direction, inv_hess, force)
         if (iteration_count > 0) then
-            step_angle = sum(step_direction * new_step_direction) / &
+            step_angle = dot_product_2(step_direction, new_step_direction) / &
                     & (norm2(step_direction) * norm2(new_step_direction))
         end if
         step_direction = new_step_direction
