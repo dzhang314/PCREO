@@ -43,6 +43,7 @@
 !                        while -1 indicates a full 180-degree reversal.        !
 !                        This value is displayed as an extra column on the     !
 !                        optimization status table printed to the console.     !
+!   PCREO_SYMMETRY                                                             !
 !                                                                              !
 ! Note that it is only necessary to #define these identifiers to enable their  !
 ! associated options. Their values do not matter, so even if defined as 0 or   !
@@ -86,10 +87,6 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     use, intrinsic :: iso_fortran_env, only : real32, real64, real128
     implicit none
 
-#ifdef PCREO_USE_MKL
-#include "mkl_blas.fi"
-#endif
-
 #if defined(PCREO_SINGLE_PREC)
     integer, parameter :: rk = real32
     character(len=8), parameter :: rf = 'ES15.8E2'
@@ -101,14 +98,23 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     character(len=9), parameter :: rf = 'ES44.35E4'
 #endif
 
-    real(rk), parameter :: s = 2.0_rk
-    integer, parameter :: d = 3
-    integer, parameter :: num_points = 1000
-
+    real(rk), parameter :: s = 1.0_rk
+    integer, parameter :: d = 2
+    integer, parameter :: num_points = 27
     real(rk), parameter :: print_time = 0.1_rk ! print 10 times per second
     real(rk), parameter :: save_time = 15.0_rk ! save every 15 seconds
 
+#ifdef PCREO_USE_MKL
+    include "mkl_blas.fi"
     integer, parameter :: num_vars = (d + 1) * num_points
+#endif
+
+#ifdef PCREO_SYMMETRY
+    include "../include/icosahedral_symmetry_group.f90"
+    include "../include/icosahedron_vertices.f90"
+    integer, parameter :: num_external_points = size(external_points, 2)
+    integer, parameter :: symmetry_group_order = size(symmetry_group, 3)
+#endif
 
 contains
 
@@ -121,8 +127,21 @@ contains
         write(line,*) s
         write(*,*) "Value of s (Riesz potential power parameter): ", &
                 & trim(adjustl(line))
+#ifdef PCREO_SYMMETRY
+        write(line,*) num_points
+        write(*,*) "Number of movable points: ", trim(adjustl(line))
+        write(line,*) num_external_points
+        write(*,*) "Number of fixed points: ", trim(adjustl(line))
+        write(line,*) external_energy
+        write(*,*) "Fixed point energy: ", trim(adjustl(line))
+        write(line,*) symmetry_group_order
+        write(*,*) "Order of symmetry group: ", trim(adjustl(line))
+        write(line,*) num_external_points + symmetry_group_order * num_points
+        write(*,*) "Total number of points: ", trim(adjustl(line))
+#else
         write(line,*) num_points
         write(*,*) "Number of points: ", trim(adjustl(line))
+#endif
         write(line,*) print_time
         write(*,*) "Terminal output frequency: every ", &
                 & trim(adjustl(line)), " seconds"
@@ -161,6 +180,19 @@ contains
     end subroutine init_random_seed
 
 
+    subroutine random_normal_points(points)
+        real(rk), intent(out) :: points(:,:)
+
+        real(rk), allocatable :: u(:,:)
+
+        allocate(u, mold=points)
+        call random_number(u)
+        points = sqrt(-2.0_rk * log(u))
+        call random_number(u)
+        points = points * sin(4.0_rk * asin(1.0_rk) * u)
+    end subroutine random_normal_points
+
+
     real(rk) function current_time()
         integer :: ticks, tick_rate
         call system_clock(ticks, tick_rate)
@@ -187,7 +219,11 @@ contains
     subroutine print_welcome_message
         write(*,*) " _____   _____"
         write(*,*) "|  __ \ / ____|                David Zhang"
+#if defined(PCREO_SYMMETRY)
+        write(*,*) "| |__) | |     _ __ ___  ___    Symmetric"
+#else
         write(*,*) "| |__) | |     _ __ ___  ___"
+#endif
 #if defined(PCREO_GRAD_DESC)
         write(*,*) "|  ___/| |    | '__/ _ \/ _ \  Grad. Desc."
 #elif defined(PCREO_BFGS)
@@ -258,18 +294,6 @@ module sphere_riesz_energy !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 contains
 
-    subroutine random_normal_points(points)
-        real(rk), intent(out) :: points(d + 1, num_points)
-
-        real(rk) :: u(d + 1, num_points)
-
-        call random_number(u)
-        points = sqrt(-2.0_rk * log(u))
-        call random_number(u)
-        points = points * sin(4.0_rk * asin(1.0_rk) * u)
-    end subroutine random_normal_points
-
-
     pure subroutine constrain_points(points)
         real(rk), intent(inout) :: points(d + 1, num_points)
 
@@ -280,14 +304,150 @@ contains
         end do
     end subroutine constrain_points
 
+#ifdef PCREO_SYMMETRY
+
+    pure real(rk) function pair_potential(r)
+        real(rk), intent(in) :: r
+
+        pair_potential = r**(-s)
+    end function pair_potential
+
+
+    pure real(rk) function pair_potential_derivative(r)
+        real(rk), intent(in) :: r
+
+        pair_potential_derivative = -s * r**(-s - 1.0_rk)
+    end function pair_potential_derivative
+
+
+    pure subroutine add_pair_energy(source_pt, target_pt, energy)
+        real(rk), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(rk), intent(inout) :: energy
+
+        energy = energy + pair_potential(norm2(target_pt - source_pt))
+    end subroutine add_pair_energy
+
+
+    pure subroutine add_pair_energy_2(source_pt, target_pt, energy)
+        real(rk), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(rk), intent(inout) :: energy
+
+        energy = energy + 2.0_rk * pair_potential(norm2(target_pt - source_pt))
+    end subroutine add_pair_energy_2
+
+
+    pure subroutine add_pair_energy_force(source_pt, target_pt, energy, force)
+        real(rk), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(rk), intent(inout) :: energy, force(d + 1)
+
+        real(rk) :: displacement(d + 1), r
+
+        displacement = target_pt - source_pt
+        r = norm2(displacement)
+        energy = energy + pair_potential(r)
+        force = force - (pair_potential_derivative(r) / r) * displacement
+    end subroutine add_pair_energy_force
+
+
+    pure subroutine add_pair_energy_force_2(source_pt, target_pt, energy, force)
+        real(rk), intent(in) :: source_pt(d + 1), target_pt(d + 1)
+        real(rk), intent(inout) :: energy, force(d + 1)
+
+        real(rk) :: displacement(d + 1), r
+
+        displacement = target_pt - source_pt
+        r = norm2(displacement)
+        energy = energy + 2.0_rk * pair_potential(r)
+        force = force - (pair_potential_derivative(r) / r) * displacement
+    end subroutine add_pair_energy_force_2
+
 
     pure real(rk) function riesz_energy(points)
         real(rk), intent(in) :: points(d + 1, num_points)
 
+        integer :: b, p, q
+
+        riesz_energy = 0.0_rk
+        do p = 1, num_points
+            do q = 1, num_external_points
+                call add_pair_energy_2( &
+                    & external_points(:,q), &
+                    & points(:,p), riesz_energy)
+            end do
+            do b = 2, symmetry_group_order
+                call add_pair_energy( &
+                    & matmul(symmetry_group(:,:,b), points(:,p)), &
+                    & points(:,p), riesz_energy)
+            end do
+            do q = 1, p - 1
+                do b = 1, symmetry_group_order
+                    call add_pair_energy( &
+                        & matmul(symmetry_group(:,:,b), points(:,q)), &
+                        & points(:,p), riesz_energy)
+                end do
+            end do
+            do q = p + 1, num_points
+                do b = 1, symmetry_group_order
+                    call add_pair_energy( &
+                        & matmul(symmetry_group(:,:,b), points(:,q)), &
+                        & points(:,p), riesz_energy)
+                end do
+            end do
+        end do
+        riesz_energy = external_energy + &
+            & 0.5_rk * symmetry_group_order * riesz_energy
+    end function riesz_energy
+
+
+    pure subroutine riesz_energy_force(points, energy, force)
+        real(rk), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(out) :: energy, force(d + 1, num_points)
+
+        integer :: b, p, q
+
+        energy = 0.0_rk
+        do p = 1, num_points
+            force(:,p) = 0.0_rk
+            do q = 1, num_external_points
+                call add_pair_energy_force_2( &
+                    & external_points(:,q), &
+                    & points(:,p), energy, force(:,p))
+            end do
+            do b = 2, symmetry_group_order
+                call add_pair_energy_force( &
+                    & matmul(symmetry_group(:,:,b), points(:,p)), &
+                    & points(:,p), energy, force(:,p))
+            end do
+            do q = 1, p - 1
+                do b = 1, symmetry_group_order
+                    call add_pair_energy_force( &
+                        & matmul(symmetry_group(:,:,b), points(:,q)), &
+                        & points(:,p), energy, force(:,p))
+                end do
+            end do
+            do q = p + 1, num_points
+                do b = 1, symmetry_group_order
+                    call add_pair_energy_force( &
+                        & matmul(symmetry_group(:,:,b), points(:,q)), &
+                        & points(:,p), energy, force(:,p))
+                end do
+            end do
+            force(:,p) = force(:,p) - &
+                & dot_product(force(:,p), points(:,p)) * points(:,p)
+        end do
+        force = symmetry_group_order * force
+        energy = external_energy + 0.5_rk * symmetry_group_order * energy
+    end subroutine riesz_energy_force
+
+#else
+
+    pure real(rk) function riesz_energy(points)
+        real(rk), intent(in) :: points(:,:)
+
         integer :: i, j
 
         riesz_energy = 0.0_rk
-        do j = 1, num_points
+        do j = 1, size(points, 2)
             do i = 1, j - 1
                 riesz_energy = riesz_energy + &
                         & norm2(points(:,i) - points(:,j))**(-s)
@@ -297,14 +457,14 @@ contains
 
 
     pure subroutine riesz_energy_force(points, ener, force)
-        real(rk), intent(in) :: points(d + 1, num_points)
-        real(rk), intent(out) :: ener, force(d + 1, num_points)
+        real(rk), intent(in) :: points(:,:)
+        real(rk), intent(out) :: ener, force(:,:)
 
-        real(rk) :: displ(d + 1), dist_sq, term
+        real(rk) :: displ(size(points, 1)), dist_sq, term
         integer :: i, j
 
         ener = 0.0_rk
-        do j = 1, num_points
+        do j = 1, size(points, 2)
             force(:,j) = 0.0_rk
             do i = 1, j - 1
                 displ = points(:,i) - points(:,j)
@@ -314,7 +474,7 @@ contains
                 term = s * term / dist_sq
                 force(:,j) = force(:,j) - term * displ
             end do
-            do i = j + 1, num_points
+            do i = j + 1, size(points, 2)
                 displ = points(:,i) - points(:,j)
                 term = s * norm2(displ)**(-s - 2.0_rk)
                 force(:,j) = force(:,j) - term * displ
@@ -323,6 +483,8 @@ contains
                 & dot_product(force(:,j), points(:,j)) * points(:,j)
         end do
     end subroutine riesz_energy_force
+
+#endif
 
 end module sphere_riesz_energy
 
