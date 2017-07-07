@@ -50,16 +50,23 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     implicit none
+
+#ifdef PCREO_USE_MKL
     include "mkl_blas.fi"
+    integer, parameter :: rk = selected_real_kind(15, 307)  ! IEEE double prec.
+#else
+    integer, parameter :: sp = selected_real_kind(6, 37)    ! IEEE single prec.
     integer, parameter :: dp = selected_real_kind(15, 307)  ! IEEE double prec.
+    integer, parameter :: qp = selected_real_kind(33, 4931) ! IEEE quad prec.
+    integer, parameter :: rk = dp
+#endif
 
-    real(dp), parameter :: s = 1.0d0
+    real(rk), parameter :: s = 2.0_rk
     integer, parameter :: d = 3
-    integer, parameter :: num_points = 1000
+    integer, parameter :: num_points = 100
 
-    real(dp), parameter :: print_time = 0.1d0 ! print 10 times per second
-    real(dp), parameter :: save_time = 15.0d0 ! save every 15 seconds
-    logical, parameter :: track_step_angle = .false.
+    real(rk), parameter :: print_time = 0.1_rk ! print 10 times per second
+    real(rk), parameter :: save_time = 15.0_rk ! save every 15 seconds
 
     integer, parameter :: num_vars = (d + 1) * num_points
 
@@ -102,19 +109,19 @@ module sphere_riesz_energy !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 contains
 
     subroutine random_normal_points(points)
-        real(dp), intent(out) :: points(d + 1, num_points)
+        real(rk), intent(out) :: points(d + 1, num_points)
 
-        real(dp) :: u(d + 1, num_points)
+        real(rk) :: u(d + 1, num_points)
 
         call random_number(u)
-        points = sqrt(-2.0d0 * log(u))
+        points = sqrt(-2.0_rk * log(u))
         call random_number(u)
-        points = points * sin(4.0d0 * asin(1.0d0) * u)
+        points = points * sin(4.0_rk * asin(1.0_rk) * u)
     end subroutine random_normal_points
 
 
     pure subroutine constrain_points(points)
-        real(dp), intent(inout) :: points(d + 1, num_points)
+        real(rk), intent(inout) :: points(d + 1, num_points)
 
         integer :: i
 
@@ -124,12 +131,12 @@ contains
     end subroutine constrain_points
 
 
-    pure real(dp) function riesz_energy(points)
-        real(dp), intent(in) :: points(d + 1, num_points)
+    pure real(rk) function riesz_energy(points)
+        real(rk), intent(in) :: points(d + 1, num_points)
 
         integer :: i, j
 
-        riesz_energy = 0.0d0
+        riesz_energy = 0.0_rk
         do j = 1, num_points
             do i = 1, j - 1
                 riesz_energy = riesz_energy + &
@@ -140,26 +147,26 @@ contains
 
 
     pure subroutine riesz_energy_gradient(points, ener, grad)
-        real(dp), intent(in) :: points(d + 1, num_points)
-        real(dp), intent(out) :: ener, grad(d + 1, num_points)
+        real(rk), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(out) :: ener, grad(d + 1, num_points)
 
-        real(dp) :: displ(d + 1), dist_sq, term
+        real(rk) :: displ(d + 1), dist_sq, term
         integer :: i, j
 
-        ener = 0.0d0
+        ener = 0.0_rk
         do j = 1, num_points
-            grad(:,j) = 0.0d0
+            grad(:,j) = 0.0_rk
             do i = 1, j - 1
                 displ = points(:,i) - points(:,j)
                 dist_sq = dot_product(displ, displ)
-                term = dist_sq**(-0.5d0 * s)
+                term = dist_sq**(-0.5_rk * s)
                 ener = ener + term
                 term = s * term / dist_sq
                 grad(:,j) = grad(:,j) + term * displ
             end do
             do i = j + 1, num_points
                 displ = points(:,i) - points(:,j)
-                term = s * norm2(displ)**(-s - 2.0d0)
+                term = s * norm2(displ)**(-s - 2.0_rk)
                 grad(:,j) = grad(:,j) + term * displ
             end do
             grad(:,j) = grad(:,j) - &
@@ -168,6 +175,91 @@ contains
     end subroutine riesz_energy_gradient
 
 end module sphere_riesz_energy
+
+
+
+module linear_algebra_4
+
+    use constants
+    implicit none
+
+contains
+
+    real(rk) function dot_product_2(v, w) result (dot)
+        real(rk), intent(in), dimension(d + 1, num_points) :: v, w
+
+#ifdef PCREO_USE_MKL
+        dot = ddot(num_vars, v, 1, w, 1)
+#else
+        integer :: i, j
+
+        dot = 0.0_rk
+        do j = 1, num_points
+            do i = 1, d + 1
+                dot = dot + v(i,j) * w(i,j)
+            end do
+        end do
+#endif
+    end function dot_product_2
+
+
+    subroutine matrix_multiply_42(c, A, b)
+        real(rk), intent(out) :: c(d + 1, num_points)
+        real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(in) :: b(d + 1, num_points)
+
+#ifdef PCREO_USE_MKL
+        call dsymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
+#else
+        integer :: i, j, k, l
+
+        do j = 1, num_points
+            do i = 1, d + 1
+                c(i,j) = 0.0_rk
+                do l = 1, num_points
+                    do k = 1, d + 1
+                        c(i,j) = c(i,j) + A(k,l,i,j) * b(k,l)
+                    end do
+                end do
+            end do
+        end do
+#endif
+    end subroutine matrix_multiply_42
+
+
+    subroutine symmetric_update_4(A, c, x, y)
+        real(rk), intent(inout) :: A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(in) :: c, x(d + 1, num_points), y(d + 1, num_points)
+
+#ifdef PCREO_USE_MKL
+        call dsyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
+#else
+        integer :: i, j, k, l
+
+        do concurrent (i = 1 : d + 1, j = 1 : num_points, &
+                     & k = 1 : d + 1, l = 1 : num_points)
+            A(i,j,k,l) = A(i,j,k,l) + c * (x(i,j) * y(k,l) + y(i,j) * x(k,l))
+        end do
+#endif
+    end subroutine symmetric_update_4
+
+
+    subroutine identity_matrix_4(A)
+        real(rk), intent(out) :: A(d + 1, num_points, d + 1, num_points)
+
+#ifdef PCREO_USE_MKL
+        call dlaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
+#else
+        integer :: i, j, k, l
+
+        do concurrent (i = 1 : d + 1, j = 1 : num_points, &
+                     & k = 1 : d + 1, l = 1 : num_points)
+            A(i,j,k,l) = merge(1.0_rk, 0.0_rk, i == k .and. j == l)
+        end do
+#endif
+    end subroutine identity_matrix_4
+
+end module linear_algebra_4
 
 
 
@@ -182,34 +274,49 @@ module bfgs_subroutines !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     use constants
     use sphere_riesz_energy
+    use linear_algebra_4
     implicit none
 
 contains
 
     subroutine update_inverse_hessian( &
             & inv_hess, delta_gradient, step_size, step_direction)
-        real(dp), intent(inout) :: &
+        real(rk), intent(inout) :: &
                 & inv_hess(d + 1, num_points, d + 1, num_points)
-        real(dp), intent(in) :: delta_gradient(d + 1, num_points)
-        real(dp), intent(in) :: step_size, step_direction(d + 1, num_points)
+        real(rk), intent(in) :: delta_gradient(d + 1, num_points)
+        real(rk), intent(in) :: step_size, step_direction(d + 1, num_points)
 
-        real(dp) :: lambda, theta, sigma, kappa(d + 1, num_points)
+        real(rk) :: lambda, theta, sigma, kappa(d + 1, num_points)
 
-        lambda = step_size * ddot(num_vars, &
-                & delta_gradient, 1, step_direction, 1)
-        call dsymv('U', num_vars, 1.0d0, inv_hess, &
-                & num_vars, delta_gradient, 1, 0.0d0, kappa, 1)
-        theta = ddot(num_vars, delta_gradient, 1, kappa, 1)
+        lambda = step_size * dot_product_2(delta_gradient, step_direction)
+        call matrix_multiply_42(kappa, inv_hess, delta_gradient)
+        theta = dot_product_2(delta_gradient, kappa)
         sigma = (lambda + theta) / (lambda * lambda)
-        kappa = kappa - (0.5d0 * step_size * lambda * sigma) * step_direction
-        call dsyr2('U', num_vars, -step_size / lambda, &
-                & kappa, 1, step_direction, 1, inv_hess, num_vars)
+        kappa = kappa - (0.5_rk * step_size * lambda * sigma) * step_direction
+        call symmetric_update_4(inv_hess, -step_size / lambda, &
+                              & kappa, step_direction)
     end subroutine update_inverse_hessian
 
+end module bfgs_subroutines
+
+
+
+module line_search !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
+! The line_search module contains a single subroutine implementing a simple    !
+! quadratic line search algorithm.                                             !
+!                                                                              !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    use constants
+    use sphere_riesz_energy
+    implicit none
+
+contains
 
     include "../include/quadratic_line_search.f90"
 
-end module bfgs_subroutines
+end module line_search
 
 
 
@@ -222,18 +329,24 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     use constants
     use sphere_riesz_energy
+    use linear_algebra_4
+    use line_search
     use bfgs_subroutines
     implicit none
 
-    real(dp), dimension(d + 1, num_points) :: old_points, new_points
-    real(dp) :: old_energy, new_energy
-    real(dp), dimension(d + 1, num_points) :: old_gradient, new_gradient
+    real(rk), dimension(d + 1, num_points) :: old_points, new_points
+    real(rk) :: old_energy, new_energy
+    real(rk), dimension(d + 1, num_points) :: old_gradient, new_gradient
     ! Approximate inverse Hessian, calculated by BFGS
-    real(dp) :: inv_hess(d + 1, num_points, d + 1, num_points), step_size
-    real(dp), dimension(d + 1, num_points) :: &
-        & old_step_direction, new_step_direction, delta_gradient
-    real(dp) :: step_angle, last_print_time, last_save_time, cur_time
+    real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points), step_size
+    real(rk), dimension(d + 1, num_points) :: step_direction, delta_gradient
+    real(rk) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
+
+#ifdef PCREO_TRACK_ANGLE
+    real(rk) :: step_angle
+    real(rk), dimension(d + 1, num_points) :: new_step_direction
+#endif
 
     call print_welcome_message
     write(*,*)
@@ -243,9 +356,9 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     write(*,*)
 
     ! Initialize inv_hess to identity matrix
-    call dlaset('U', num_vars, num_vars, 0.0d0, 1.0d0, inv_hess, num_vars)
+    call identity_matrix_4(inv_hess)
     ! TODO: Is there a more natural choice of initial step size?
-    step_size = 1.0d-10
+    step_size = 1.0E-10_rk
 
     iteration_count = 0
     cur_time = current_time()
@@ -255,33 +368,35 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_table_header
     call print_optimization_status
     do
+#ifdef PCREO_TRACK_ANGLE
         ! Multiply inverse hessian by negative gradient to obtain step direction
-        call dsymv('U', num_vars, -1.0d0, inv_hess, num_vars, &
-                & old_gradient, 1, 0.0d0, new_step_direction, 1)
-        if (track_step_angle) then
-            if (iteration_count > 0) then
-                step_angle = sum(old_step_direction * new_step_direction) / &
-                        & (norm2(old_step_direction) * norm2(new_step_direction))
-            else
-                step_angle = 0.0d0
-            end if
+        call matrix_multiply_42(new_step_direction, inv_hess, old_gradient)
+        if (iteration_count > 0) then
+            step_angle = sum(step_direction * new_step_direction) / &
+                    & (norm2(step_direction) * norm2(new_step_direction))
+        else
+            step_angle = 0.0_rk
         end if
-        old_step_direction = new_step_direction
+        step_direction = new_step_direction
+#else
+        ! Multiply inverse hessian by negative gradient to obtain step direction
+        call matrix_multiply_42(step_direction, inv_hess, old_gradient)
+#endif
         step_size = quadratic_line_search(old_points, old_energy, &
-                & old_step_direction, step_size)
-        if (step_size == 0.0d0) then
+                & step_direction, step_size)
+        if (step_size == 0.0_rk) then
             call print_optimization_status
             call save_point_file(old_points, iteration_count)
             write(*,*) "Convergence has been achieved (up to numerical&
                     & round-off error). Exiting."
             stop
         end if
-        new_points = old_points + step_size * old_step_direction
+        new_points = old_points + step_size * step_direction
         call constrain_points(new_points)
         call riesz_energy_gradient(new_points, new_energy, new_gradient)
         delta_gradient = new_gradient - old_gradient
         call update_inverse_hessian(inv_hess, delta_gradient, &
-                & step_size, old_step_direction)
+                & step_size, step_direction)
         old_points = new_points
         old_energy = new_energy
         old_gradient = new_gradient
@@ -310,8 +425,8 @@ contains
 
 
     subroutine initialize_point_configuration(points, energy, gradient)
-        real(dp), intent(out) :: points(d + 1, num_points)
-        real(dp), intent(out) :: energy, gradient(d + 1, num_points)
+        real(rk), intent(out) :: points(d + 1, num_points)
+        real(rk), intent(out) :: energy, gradient(d + 1, num_points)
         integer :: u
         logical :: ex
 
@@ -344,13 +459,13 @@ contains
         write(*,'(I10,A)',advance="no") iteration_count, " |"
         write(*,'(ES23.15E3,A)',advance="no") old_energy, " |"
         write(*,'(ES23.15E3,A)',advance="no") &
-                & norm2(old_gradient) / sqrt(real(num_points, dp)), " |"
-        if (track_step_angle) then
-            write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
-            write(*,'(ES23.15E3)') step_angle
-        else
-            write(*,'(ES23.15E3)') step_size
-        end if
+                & norm2(old_gradient) / sqrt(real(num_points, rk)), " |"
+#ifdef PCREO_TRACK_ANGLE
+        write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
+        write(*,'(ES23.15E3)') step_angle
+#else
+        write(*,'(ES23.15E3)') step_size
+#endif
     end subroutine print_optimization_status
 
 
@@ -367,15 +482,15 @@ contains
     end subroutine init_random_seed
 
 
-    real(dp) function current_time()
+    real(rk) function current_time()
         integer :: ticks, tick_rate
         call system_clock(ticks, tick_rate)
-        current_time = real(ticks, dp) / real(tick_rate, dp)
+        current_time = real(ticks, rk) / real(tick_rate, rk)
     end function current_time
 
 
     subroutine save_point_file(points, idx)
-        real(dp), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(in) :: points(d + 1, num_points)
         integer, intent(in) :: idx
 
         integer :: i, j, u

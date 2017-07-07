@@ -31,7 +31,7 @@
             do
                 ! Try taking a step of double the size. Does this result in
                 ! an increase?
-                newer_points = points + (2.0d0 * step_size) * step_direction
+                newer_points = points + (2.0_rk * step_size) * step_direction
                 call constrain_points(newer_points)
                 newer_energy = riesz_energy(newer_points)
                 ! If so, then we have our bowl-shaped points, and we exit
@@ -41,7 +41,7 @@
                 ! If not, then we can be even more ambitious. Double the
                 ! step size again.
                 else
-                    step_size = 2.0d0 * step_size
+                    step_size = 2.0_rk * step_size
                     new_points = newer_points
                     new_energy = newer_energy
                     num_increases = num_increases + 1
@@ -59,16 +59,16 @@
             ! Finally, once we have our bowl-shaped points, we take the arg
             ! min of the interpolating parabola. The formula, worked out in
             ! advance, is as follows:
-            optimal_step_size = 0.5d0 * step_size * &
-                    & (4.0d0 * new_energy - newer_energy - 3.0d0 * energy) / &
-                    & (2.0d0 * new_energy - newer_energy - energy)
+            optimal_step_size = 0.5_rk * step_size * &
+                    & (4.0_rk * new_energy - newer_energy - 3.0_rk * energy) / &
+                    & (2.0_rk * new_energy - newer_energy - energy)
             ! Note that this formula is numerically unstable, since it contains
             ! subtractions of roughly equal-magnitude numbers that can result
             ! in catastrophic cancellation. To check whether this has occurred,
             ! we perform one last sanity check: the arg min should fall
             ! somewhere inside the bowl.
-            if (0.0d0 < optimal_step_size .and. &
-                    & optimal_step_size < 2.0d0 * step_size) then
+            if (0.0_rk < optimal_step_size .and. &
+                    & optimal_step_size < 2.0_rk * step_size) then
                 return
             ! If our sanity check has failed, then the bowl we found must be so
             ! shallow that it doesn't really matter what step size we return.
@@ -84,7 +84,7 @@
             do
                 ! Try taking a step of half the size. Does this result in a
                 ! decrease?
-                newer_points = points + (0.5d0 * step_size) * step_direction
+                newer_points = points + (0.5_rk * step_size) * step_direction
                 call constrain_points(newer_points)
                 newer_energy = riesz_energy(newer_points)
                 ! If so, then we have our bowl-shaped points, and we exit
@@ -93,12 +93,12 @@
                     exit
                 ! Otherwise, we need to halve the step size and try again.
                 else
-                    step_size = 0.5d0 * step_size
+                    step_size = 0.5_rk * step_size
                     ! If no step produces a decrease, no matter how small, then
                     ! we have probably started our search from a local minimum.
                     ! Return zero step size to indicate this.
-                    if (step_size == 0.0d0) then
-                        optimal_step_size = 0.0d0
+                    if (step_size == 0.0_rk) then
+                        optimal_step_size = 0.0_rk
                         return
                     end if
                     new_points = newer_points
@@ -109,16 +109,16 @@
             ! interpolating parabola. Note that this is slightly different than
             ! the previous one -- here we have b = step_size/2, c = step_size,
             ! whereas before we had b = step_size, c = 2*step_size.
-            optimal_step_size = 0.25d0 * step_size * &
-                    & (new_energy - 4.0d0 * newer_energy + 3.0d0 * energy) / &
-                    & (new_energy - 2.0d0 * newer_energy + energy)
+            optimal_step_size = 0.25_rk * step_size * &
+                    & (new_energy - 4.0_rk * newer_energy + 3.0_rk * energy) / &
+                    & (new_energy - 2.0_rk * newer_energy + energy)
             ! We perform a similar sanity check to guard against numerical
             ! instability.
-            if (0.0d0 < optimal_step_size .and. &
+            if (0.0_rk < optimal_step_size .and. &
                     & optimal_step_size < step_size) then
                 return
             else
-                optimal_step_size = 0.5d0 * step_size
+                optimal_step_size = 0.5_rk * step_size
                 return
             end if
         end if
