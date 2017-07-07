@@ -64,10 +64,13 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #if defined(PCREO_QUAD_PREC)
     integer, parameter :: rk = real128
+    character(len=9), parameter :: rf = 'ES44.35E4'
 #elif defined(PCREO_SINGLE_PREC)
     integer, parameter :: rk = real32
+    character(len=8), parameter :: rf = 'ES15.8E2'
 #else
     integer, parameter :: rk = real64
+    character(len=9), parameter :: rf = 'ES24.16E3'
 #endif
 
     real(rk), parameter :: s = 2.0_rk
@@ -497,23 +500,39 @@ contains
 
 
     subroutine print_table_header
-        write(*,'(A)') "#Iterations| Riesz s-energy         |&
-                & RMS Gradient           | Step size"
-        write(*,'(A)') "-----------+------------------------+&
-                &------------------------+------------------------"
+        if (rk == real32) then
+            write(*,'(A)') "#Iterations| Riesz s-energy |&
+                    &  RMS Gradient  | Step size"
+            write(*,'(A)') "-----------+----------------+&
+                    &----------------+----------------"
+        else if (rk == real64) then
+            write(*,'(A)') "#Iterations| Riesz s-energy         |&
+                    & RMS Gradient           | Step size"
+            write(*,'(A)') "-----------+-------------------------+&
+                    &------------------------+------------------------"
+        else if (rk == real128) then
+            write(*,'(A)') "#Iterations|&
+                    & Riesz s-energy                              |&
+                    & RMS Gradient                                |&
+                    & Step size"
+            write(*,'(A)') "-----------+&
+                    &---------------------------------------------+&
+                    &---------------------------------------------+&
+                    &---------------------------------------------"
+        end if
     end subroutine print_table_header
 
 
     subroutine print_optimization_status
         write(*,'(I10,A)',advance="no") iteration_count, " |"
-        write(*,'(ES23.15E3,A)',advance="no") old_energy, " |"
-        write(*,'(ES23.15E3,A)',advance="no") &
+        write(*,'('//rf//',A)',advance="no") old_energy, " |"
+        write(*,'('//rf//',A)',advance="no") &
                 & norm2(old_gradient) / sqrt(real(num_points, rk)), " |"
 #ifdef PCREO_TRACK_ANGLE
-        write(*,'(ES23.15E3,A)',advance="no") step_size, " |"
-        write(*,'(ES23.15E3)') step_angle
+        write(*,'('//rf//',A)',advance="no") step_size, " |"
+        write(*,'('//rf//')') step_angle
 #else
-        write(*,'(ES23.15E3)') step_size
+        write(*,'('//rf//')') step_size
 #endif
     end subroutine print_optimization_status
 
@@ -550,7 +569,7 @@ contains
         do j = 1, num_points
             do i = 1, d + 1
                 if (i > 1) write(u,'(A)',advance="no") ", "
-                write(u,'(SP,ES23.15E3)',advance="no") points(i,j)
+                write(u,'(SP,'//rf//')',advance="no") points(i,j)
             end do
             write(u,*)
         end do

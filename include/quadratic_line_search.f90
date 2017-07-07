@@ -97,7 +97,7 @@
                     ! If no step produces a decrease, no matter how small, then
                     ! we have probably started our search from a local minimum.
                     ! Return zero step size to indicate this.
-                    if (step_size == 0.0_rk) then
+                    if (abs(step_size) < epsilon(1.0_rk)) then
                         optimal_step_size = 0.0_rk
                         return
                     end if
