@@ -62,10 +62,16 @@
 #error "Intel MKL does not support quad-precision arithmetic."
 #endif
 
-#ifdef PCREO_GRAD_DESC
+#if defined(PCREO_GRAD_DESC)
 #undef PCREO_BFGS
 #else
 #define PCREO_BFGS
+#endif
+
+#if defined(PCREO_SINGLE_PREC) .or. defined(PCREO_QUAD_PREC)
+#undef PCREO_DOUBLE_PREC
+#else
+#define PCREO_DOUBLE_PREC
 #endif
 
 
@@ -84,15 +90,15 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #include "mkl_blas.fi"
 #endif
 
-#if defined(PCREO_QUAD_PREC)
-    integer, parameter :: rk = real128
-    character(len=9), parameter :: rf = 'ES44.35E4'
-#elif defined(PCREO_SINGLE_PREC)
+#if defined(PCREO_SINGLE_PREC)
     integer, parameter :: rk = real32
     character(len=8), parameter :: rf = 'ES15.8E2'
-#else
+#elif defined(PCREO_DOUBLE_PREC)
     integer, parameter :: rk = real64
     character(len=9), parameter :: rf = 'ES24.16E3'
+#elif defined(PCREO_QUAD_PREC)
+    integer, parameter :: rk = real128
+    character(len=9), parameter :: rf = 'ES44.35E4'
 #endif
 
     real(rk), parameter :: s = 2.0_rk
@@ -336,12 +342,10 @@ contains
     real(rk) function dot_product_2(v, w) result (dot)
         real(rk), intent(in), dimension(d + 1, num_points) :: v, w
 
-#ifdef PCREO_USE_MKL
-#ifdef PCREO_SINGLE_PREC
+#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         dot = sdot(num_vars, v, 1, w, 1)
-#else
+#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
         dot = ddot(num_vars, v, 1, w, 1)
-#endif
 #else
         integer :: i, j
 
@@ -360,12 +364,10 @@ contains
         real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
         real(rk), intent(in) :: b(d + 1, num_points)
 
-#ifdef PCREO_USE_MKL
-#ifdef PCREO_SINGLE_PREC
+#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#else
+#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
         call dsymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#endif
 #else
         integer :: i, j, k, l
 
@@ -388,12 +390,10 @@ contains
         real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
         real(rk), intent(in) :: b(d + 1, num_points)
 
-#ifdef PCREO_USE_MKL
-#ifdef PCREO_SINGLE_PREC
+#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#else
+#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
         call dsymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#endif
 #else
         integer :: i, j, k, l
 
@@ -415,12 +415,10 @@ contains
         real(rk), intent(inout) :: A(d + 1, num_points, d + 1, num_points)
         real(rk), intent(in) :: c, x(d + 1, num_points), y(d + 1, num_points)
 
-#ifdef PCREO_USE_MKL
-#ifdef PCREO_SINGLE_PREC
+#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
-#else
+#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
         call dsyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
-#endif
 #else
         integer :: i, j, k, l
 
@@ -435,7 +433,9 @@ contains
     subroutine identity_matrix_4(A)
         real(rk), intent(out) :: A(d + 1, num_points, d + 1, num_points)
 
-#ifdef PCREO_USE_MKL
+#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
+        call slaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
+#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
         call dlaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
 #else
         integer :: i, j, k, l
@@ -655,6 +655,7 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call initialize_point_configuration(points, energy, force)
 #ifdef PCREO_BFGS
     call identity_matrix_4(inv_hess)
+    step_direction = force
 #endif
     write(*,*)
 
@@ -672,9 +673,9 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_table_header
     call print_optimization_status
 
-    do
 #if defined(PCREO_GRAD_DESC)
 
+    do
         step_size = quadratic_line_search(points, energy, force, step_size)
         call check_step_size
         points = points + step_size * force
@@ -686,23 +687,12 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #else
         call riesz_energy_force(points, energy, force)
 #endif
+        call finish_iteration
+    end do
 
 #elif defined(PCREO_BFGS)
 
-#ifdef PCREO_TRACK_ANGLE
-        ! Multiply inverse hessian by force to obtain step direction
-        call matrix_multiply_42(new_step_direction, inv_hess, force)
-        if (iteration_count > 0) then
-            step_angle = sum(step_direction * new_step_direction) / &
-                    & (norm2(step_direction) * norm2(new_step_direction))
-        else
-            step_angle = 0.0_rk
-        end if
-        step_direction = new_step_direction
-#else
-        ! Multiply inverse hessian by negative gradient to obtain step direction
-        call matrix_multiply_42(step_direction, inv_hess, force)
-#endif
+    do
         step_size = quadratic_line_search( &
                 & points, energy, step_direction, step_size)
         call check_step_size
@@ -715,20 +705,21 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         points = new_points
         energy = new_energy
         force = new_force
+#ifdef PCREO_TRACK_ANGLE
+        call matrix_multiply_42(new_step_direction, inv_hess, force)
+        if (iteration_count > 0) then
+            step_angle = sum(step_direction * new_step_direction) / &
+                    & (norm2(step_direction) * norm2(new_step_direction))
+        end if
+        step_direction = new_step_direction
+#else
+        call matrix_multiply_42(step_direction, inv_hess, force)
+#endif
+        call finish_iteration
+    end do
 
 #endif
 
-        iteration_count = iteration_count + 1
-        cur_time = current_time()
-        if (cur_time - last_print_time >= print_time) then
-            call print_optimization_status
-            last_print_time = cur_time
-        end if
-        if (cur_time - last_save_time >= save_time) then
-            call save_point_file(points, iteration_count)
-            last_save_time = cur_time
-        end if
-    end do
 
 contains
 
@@ -778,5 +769,19 @@ contains
             stop
         end if
     end subroutine check_step_size
+
+
+    subroutine finish_iteration
+        iteration_count = iteration_count + 1
+        cur_time = current_time()
+        if (cur_time - last_print_time >= print_time) then
+            call print_optimization_status
+            last_print_time = cur_time
+        end if
+        if (cur_time - last_save_time >= save_time) then
+            call save_point_file(points, iteration_count)
+            last_save_time = cur_time
+        end if
+    end subroutine finish_iteration
 
 end program pcreo_sphere
