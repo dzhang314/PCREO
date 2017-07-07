@@ -67,7 +67,7 @@
 module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
 ! The constants module contains basic constants and parameters used throughout !
-! the rest of the program.                                                     !
+! PCreo_Sphere. All code to follow depends on this module.                     !
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -120,6 +120,116 @@ contains
     end subroutine print_parameters
 
 end module constants
+
+
+
+module system_utilities  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
+! The system_utilities module contains subroutines for interacting with        !
+! components of the Fortran runtime system (e.g. seeding the pseudorandom      !
+! number generator).                                                           !
+!                                                                              !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    use constants
+    implicit none
+
+contains
+
+    subroutine init_random_seed
+        integer :: i, n, clock
+        integer, allocatable :: seed(:)
+
+        call random_seed(size=n)
+        allocate(seed(n))
+        call system_clock(count=clock)
+        seed = clock + 37 * (/ (i, i = 1, n) /)
+        call random_seed(put=seed)
+        deallocate(seed)
+    end subroutine init_random_seed
+
+
+    real(rk) function current_time()
+        integer :: ticks, tick_rate
+        call system_clock(ticks, tick_rate)
+        current_time = real(ticks, rk) / real(tick_rate, rk)
+    end function current_time
+
+end module system_utilities
+
+
+
+module pcreo_utilities  !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
+! The pcreo_utilities module contains subroutines for printing the current     !
+! optimization status to the terminal and saving point configurations as       !
+! comma-separated (csv) text files.                                            !
+!                                                                              !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    use constants
+    implicit none
+
+contains
+
+    subroutine print_welcome_message
+        write(*,*) " _____   _____"
+        write(*,*) "|  __ \ / ____|                David Zhang"
+        write(*,*) "| |__) | |     _ __ ___  ___"
+#ifdef PCREO_GRAD_DESC
+        write(*,*) "|  ___/| |    | '__/ _ \/ _ \  Grad. Desc."
+#else
+        write(*,*) "|  ___/| |    | '__/ _ \/ _ \    B F G S"
+#endif
+        write(*,*) "| |    | |____| | |  __/ (_) |  Optimized"
+        write(*,*) "|_|     \_____|_|  \___|\___/  For Spheres"
+    end subroutine print_welcome_message
+
+
+    subroutine print_table_header
+        if (rk == real32) then
+            write(*,'(A)') "#Iterations| Riesz s-energy |&
+                    &  RMS Gradient  | Step size"
+            write(*,'(A)') "-----------+----------------+&
+                    &----------------+----------------"
+        else if (rk == real64) then
+            write(*,'(A)') "#Iterations| Riesz s-energy         |&
+                    & RMS Gradient           | Step size"
+            write(*,'(A)') "-----------+-------------------------+&
+                    &------------------------+------------------------"
+        else if (rk == real128) then
+            write(*,'(A)') "#Iterations|&
+                    & Riesz s-energy                              |&
+                    & RMS Gradient                                |&
+                    & Step size"
+            write(*,'(A)') "-----------+&
+                    &---------------------------------------------+&
+                    &---------------------------------------------+&
+                    &---------------------------------------------"
+        end if
+    end subroutine print_table_header
+
+
+    subroutine save_point_file(points, idx)
+        real(rk), intent(in) :: points(d + 1, num_points)
+        integer, intent(in) :: idx
+
+        integer :: i, j, u
+        character(len=34) :: fname
+
+        write(fname,"(a,i10.10,a)") "point_configuration_", idx, ".csv"
+        open(file=fname, newunit=u)
+        do j = 1, num_points
+            do i = 1, d + 1
+                if (i > 1) write(u,'(A)',advance="no") ", "
+                write(u,'(SP,'//rf//')',advance="no") points(i,j)
+            end do
+            write(u,*)
+        end do
+        close(u)
+    end subroutine save_point_file
+
+end module pcreo_utilities
 
 
 
@@ -202,11 +312,44 @@ contains
         end do
     end subroutine riesz_energy_gradient
 
+
+    pure subroutine riesz_energy_force(points, ener, force)
+        real(rk), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(out) :: ener, force(d + 1, num_points)
+
+        real(rk) :: displ(d + 1), dist_sq, term
+        integer :: i, j
+
+        ener = 0.0_rk
+        do j = 1, num_points
+            force(:,j) = 0.0_rk
+            do i = 1, j - 1
+                displ = points(:,i) - points(:,j)
+                dist_sq = dot_product(displ, displ)
+                term = dist_sq**(-0.5_rk * s)
+                ener = ener + term
+                term = s * term / dist_sq
+                force(:,j) = force(:,j) - term * displ
+            end do
+            do i = j + 1, num_points
+                displ = points(:,i) - points(:,j)
+                term = s * norm2(displ)**(-s - 2.0_rk)
+                force(:,j) = force(:,j) - term * displ
+            end do
+            force(:,j) = force(:,j) - &
+                & dot_product(force(:,j), points(:,j)) * points(:,j)
+        end do
+    end subroutine riesz_energy_force
+
 end module sphere_riesz_energy
 
 
 
-module linear_algebra_4
+module linear_algebra_4 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                                              !
+!                                                                              !
+!                                                                              !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     use constants
     implicit none
@@ -331,12 +474,9 @@ end module linear_algebra_4
 
 
 
-module bfgs_subroutines !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+module optimization_subroutines !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
-! The bfgs_subroutines module contains subroutines for the two key operations  !
-! in the BFGS algorithm: line search, which in our case is a simple quadratic  !
-! line search, and performing symmetric rank-two updates of the approximate    !
-! inverse Hessian.                                                             !
+!                                                                              !
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -347,7 +487,7 @@ module bfgs_subroutines !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 contains
 
-    subroutine update_inverse_hessian( &
+    subroutine bfgs_update_inverse_hessian( &
             & inv_hess, delta_gradient, step_size, step_direction)
         real(rk), intent(inout) :: &
                 & inv_hess(d + 1, num_points, d + 1, num_points)
@@ -363,43 +503,210 @@ contains
         kappa = kappa - (0.5_rk * step_size * lambda * sigma) * step_direction
         call symmetric_update_4(inv_hess, -step_size / lambda, &
                               & kappa, step_direction)
-    end subroutine update_inverse_hessian
-
-end module bfgs_subroutines
+    end subroutine bfgs_update_inverse_hessian
 
 
+    pure real(rk) function quadratic_line_search(points, energy, &
+            & step_direction, initial_step_size) result (optimal_step_size)
+        real(rk), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(in) :: energy
+        real(rk), intent(in) :: step_direction(d + 1, num_points)
+        real(rk), intent(in) :: initial_step_size
 
-module line_search !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        real(rk), dimension(d + 1, num_points) :: new_points, newer_points
+        real(rk) :: step_size, new_energy, newer_energy
+        integer :: num_increases
+
+        ! The goal of quadratic line search is to find three points, a, b, c,
+        ! such that a < b < c and f(a) > f(b) < f(c). We say that such a
+        ! triplet of points is "bowl-shaped." Once we have three bowl-shaped
+        ! points, we fit a parabola through them, and take its minimum as our
+        ! best step size. In this implementation, we take a = 0, so that f(a)
+        ! is the energy at the initial point, and work to find b and c such
+        ! that c = 2*b.
+
+        ! First, we take a step using our initial step size, and see where it
+        ! leads us. In particular, does it increase or decrease the energy?
+        step_size = initial_step_size
+        new_points = points + step_size * step_direction
+        call constrain_points(new_points)
+        new_energy = riesz_energy(new_points)
+
+        ! If the new energy is less than the old energy, then we can afford
+        ! to be a bit more ambitious. We try a larger step size.
+        if (new_energy < energy) then
+            num_increases = 0
+            do
+                ! Try taking a step of double the size. Does this result in
+                ! an increase?
+                newer_points = points + (2.0_rk * step_size) * step_direction
+                call constrain_points(newer_points)
+                newer_energy = riesz_energy(newer_points)
+                ! If so, then we have our bowl-shaped points, and we exit
+                ! the loop.
+                if (newer_energy >= new_energy) then
+                    exit
+                ! If not, then we can be even more ambitious. Double the
+                ! step size again.
+                else
+                    step_size = 2.0_rk * step_size
+                    new_points = newer_points
+                    new_energy = newer_energy
+                    num_increases = num_increases + 1
+                    ! We might run into a situation where increasing the step
+                    ! size "accidentally" decreases the energy by, say, jumping
+                    ! into the basin of a deeper local minimum. To prevent this
+                    ! from getting us too far off track, we limit the number of
+                    ! consecutive times the step size can increase.
+                    if (num_increases >= 4) then
+                        optimal_step_size = step_size
+                        return
+                    end if
+                end if
+            end do
+            ! Finally, once we have our bowl-shaped points, we take the arg
+            ! min of the interpolating parabola. The formula, worked out in
+            ! advance, is as follows:
+            optimal_step_size = 0.5_rk * step_size * &
+                    & (4.0_rk * new_energy - newer_energy - 3.0_rk * energy) / &
+                    & (2.0_rk * new_energy - newer_energy - energy)
+            ! Note that this formula is numerically unstable, since it contains
+            ! subtractions of roughly equal-magnitude numbers that can result
+            ! in catastrophic cancellation. To check whether this has occurred,
+            ! we perform one last sanity check: the arg min should fall
+            ! somewhere inside the bowl.
+            if (0.0_rk < optimal_step_size .and. &
+                    & optimal_step_size < 2.0_rk * step_size) then
+                return
+            ! If our sanity check has failed, then the bowl we found must be so
+            ! shallow that it doesn't really matter what step size we return.
+            ! Just take the middle of the bowl.
+            else
+                optimal_step_size = step_size
+                return
+            end if
+        ! Now, if the new energy is greater than the old energy, or worse,
+        ! gives a non-finite (Inf/NaN) result, then we know our initial step
+        ! size was too large.
+        else
+            do
+                ! Try taking a step of half the size. Does this result in a
+                ! decrease?
+                newer_points = points + (0.5_rk * step_size) * step_direction
+                call constrain_points(newer_points)
+                newer_energy = riesz_energy(newer_points)
+                ! If so, then we have our bowl-shaped points, and we exit
+                ! the loop.
+                if (newer_energy < energy) then
+                    exit
+                ! Otherwise, we need to halve the step size and try again.
+                else
+                    step_size = 0.5_rk * step_size
+                    ! If no step produces a decrease, no matter how small, then
+                    ! we have probably started our search from a local minimum.
+                    ! Return zero step size to indicate this.
+                    if (abs(step_size) < epsilon(1.0_rk)) then
+                        optimal_step_size = 0.0_rk
+                        return
+                    end if
+                    new_points = newer_points
+                    new_energy = newer_energy
+                end if
+            end do
+            ! Again, we use the following formula for the arg min of the
+            ! interpolating parabola. Note that this is slightly different than
+            ! the previous one -- here we have b = step_size/2, c = step_size,
+            ! whereas before we had b = step_size, c = 2*step_size.
+            optimal_step_size = 0.25_rk * step_size * &
+                    & (new_energy - 4.0_rk * newer_energy + 3.0_rk * energy) / &
+                    & (new_energy - 2.0_rk * newer_energy + energy)
+            ! We perform a similar sanity check to guard against numerical
+            ! instability.
+            if (0.0_rk < optimal_step_size .and. &
+                    & optimal_step_size < step_size) then
+                return
+            else
+                optimal_step_size = 0.5_rk * step_size
+                return
+            end if
+        end if
+    end function quadratic_line_search
+
+end module optimization_subroutines
+
+
+
+program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
-! The line_search module contains a single subroutine implementing a simple    !
-! quadratic line search algorithm.                                             !
+! Main program of PCreo_Sphere. Contains subroutines for displaying and saving !
+! the current optimization status.                                             !
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+#ifdef PCREO_GRAD_DESC
 
     use constants
     use sphere_riesz_energy
+    use line_search
     implicit none
 
-contains
+    real(dp), dimension(d + 1, num_points) :: points, old_force, new_force
+    real(dp) :: energy, step_size, force_angle
+    real(dp) :: last_print_time, last_save_time, cur_time
+    integer :: iteration_count
 
-#include "../include/quadratic_line_search.f90"
+    call print_welcome_message
+    write(*,*)
+    call print_parameters
+    write(*,*)
+    call initialize_point_configuration(points, energy, old_force)
+    write(*,*)
 
-end module line_search
+    ! TODO: Is there a more natural choice of initial step size?
+    step_size = 1.0d-10
 
+    iteration_count = 0
+    cur_time = current_time()
+    last_print_time = cur_time
+    last_save_time = cur_time
 
+    call print_table_header
+    call print_optimization_status
+    do
+        step_size = quadratic_line_search(points, energy, old_force, step_size)
+        if (step_size == 0.0d0) then
+            call print_optimization_status
+            call save_point_file(points, iteration_count)
+            write(*,*) "Convergence has been achieved (up to numerical&
+                    & round-off error). Exiting."
+            stop
+        end if
+        points = points + step_size * old_force
+        call constrain_points(points)
+        call riesz_energy_force(points, energy, new_force)
+        force_angle = sum(old_force * new_force) / &
+            & (norm2(old_force) * norm2(new_force))
+        old_force = new_force
+        iteration_count = iteration_count + 1
+        cur_time = current_time()
+        if (cur_time - last_print_time >= print_time) then
+            call print_optimization_status
+            last_print_time = cur_time
+        end if
+        if (cur_time - last_save_time >= save_time) then
+            call save_point_file(points, iteration_count)
+            last_save_time = cur_time
+        end if
+    end do
 
-program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!                                                                              !
-! Main program of pcreo_sphere_bfgs_hc. Contains subroutines for displaying    !
-! and saving the current optimization status.                                  !
-!                                                                              !
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#else
 
     use constants
     use sphere_riesz_energy
     use linear_algebra_4
-    use line_search
-    use bfgs_subroutines
+    use optimization_subroutines
+    use system_utilities
+    use pcreo_utilities
     implicit none
 
     real(rk), dimension(d + 1, num_points) :: old_points, new_points
@@ -463,8 +770,8 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         call constrain_points(new_points)
         call riesz_energy_gradient(new_points, new_energy, new_gradient)
         delta_gradient = new_gradient - old_gradient
-        call update_inverse_hessian(inv_hess, delta_gradient, &
-                & step_size, step_direction)
+        call bfgs_update_inverse_hessian( &
+                & inv_hess, delta_gradient, step_size, step_direction)
         old_points = new_points
         old_energy = new_energy
         old_gradient = new_gradient
@@ -480,17 +787,9 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         end if
     end do
 
+#endif
+
 contains
-
-    subroutine print_welcome_message
-        write(*,*) " _____   _____"
-        write(*,*) "|  __ \ / ____|                David Zhang"
-        write(*,*) "| |__) | |     _ __ ___  ___"
-        write(*,*) "|  ___/| |    | '__/ _ \/ _ \    B F G S"
-        write(*,*) "| |    | |____| | |  __/ (_) |  Optimized"
-        write(*,*) "|_|     \_____|_|  \___|\___/  For Spheres"
-    end subroutine print_welcome_message
-
 
     subroutine initialize_point_configuration(points, energy, gradient)
         real(rk), intent(out) :: points(d + 1, num_points)
@@ -515,30 +814,6 @@ contains
     end subroutine initialize_point_configuration
 
 
-    subroutine print_table_header
-        if (rk == real32) then
-            write(*,'(A)') "#Iterations| Riesz s-energy |&
-                    &  RMS Gradient  | Step size"
-            write(*,'(A)') "-----------+----------------+&
-                    &----------------+----------------"
-        else if (rk == real64) then
-            write(*,'(A)') "#Iterations| Riesz s-energy         |&
-                    & RMS Gradient           | Step size"
-            write(*,'(A)') "-----------+-------------------------+&
-                    &------------------------+------------------------"
-        else if (rk == real128) then
-            write(*,'(A)') "#Iterations|&
-                    & Riesz s-energy                              |&
-                    & RMS Gradient                                |&
-                    & Step size"
-            write(*,'(A)') "-----------+&
-                    &---------------------------------------------+&
-                    &---------------------------------------------+&
-                    &---------------------------------------------"
-        end if
-    end subroutine print_table_header
-
-
     subroutine print_optimization_status
         write(*,'(I10,A)',advance="no") iteration_count, " |"
         write(*,'('//rf//',A)',advance="no") old_energy, " |"
@@ -552,44 +827,4 @@ contains
 #endif
     end subroutine print_optimization_status
 
-
-    subroutine init_random_seed
-        integer :: i, n, clock
-        integer, allocatable :: seed(:)
-
-        call random_seed(size=n)
-        allocate(seed(n))
-        call system_clock(count=clock)
-        seed = clock + 37 * (/ (i, i = 1, n) /)
-        call random_seed(put=seed)
-        deallocate(seed)
-    end subroutine init_random_seed
-
-
-    real(rk) function current_time()
-        integer :: ticks, tick_rate
-        call system_clock(ticks, tick_rate)
-        current_time = real(ticks, rk) / real(tick_rate, rk)
-    end function current_time
-
-
-    subroutine save_point_file(points, idx)
-        real(rk), intent(in) :: points(d + 1, num_points)
-        integer, intent(in) :: idx
-
-        integer :: i, j, u
-        character(len=34) :: fname
-
-        write(fname,"(a,i10.10,a)") "point_configuration_", idx, ".csv"
-        open(file=fname, newunit=u)
-        do j = 1, num_points
-            do i = 1, d + 1
-                if (i > 1) write(u,'(A)',advance="no") ", "
-                write(u,'(SP,'//rf//')',advance="no") points(i,j)
-            end do
-            write(u,*)
-        end do
-        close(u)
-    end subroutine save_point_file
-
-end program pcreo_sphere_bfgs_hc
+end program pcreo_sphere

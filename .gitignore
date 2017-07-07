@@ -32,6 +32,7 @@
 *.app
 
 # Output Data
+*.txt
 *.csv
 
 # Intel Compiler Optimization Reports
