@@ -62,6 +62,12 @@
 #error "Intel MKL does not support quad-precision arithmetic."
 #endif
 
+#ifdef PCREO_GRAD_DESC
+#undef PCREO_BFGS
+#else
+#define PCREO_BFGS
+#endif
+
 
 
 module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -176,9 +182,9 @@ contains
         write(*,*) " _____   _____"
         write(*,*) "|  __ \ / ____|                David Zhang"
         write(*,*) "| |__) | |     _ __ ___  ___"
-#ifdef PCREO_GRAD_DESC
+#if defined(PCREO_GRAD_DESC)
         write(*,*) "|  ___/| |    | '__/ _ \/ _ \  Grad. Desc."
-#else
+#elif defined(PCREO_BFGS)
         write(*,*) "|  ___/| |    | '__/ _ \/ _ \    B F G S"
 #endif
         write(*,*) "| |    | |____| | |  __/ (_) |  Optimized"
@@ -282,35 +288,6 @@ contains
             end do
         end do
     end function riesz_energy
-
-
-    pure subroutine riesz_energy_gradient(points, ener, grad)
-        real(rk), intent(in) :: points(d + 1, num_points)
-        real(rk), intent(out) :: ener, grad(d + 1, num_points)
-
-        real(rk) :: displ(d + 1), dist_sq, term
-        integer :: i, j
-
-        ener = 0.0_rk
-        do j = 1, num_points
-            grad(:,j) = 0.0_rk
-            do i = 1, j - 1
-                displ = points(:,i) - points(:,j)
-                dist_sq = dot_product(displ, displ)
-                term = dist_sq**(-0.5_rk * s)
-                ener = ener + term
-                term = s * term / dist_sq
-                grad(:,j) = grad(:,j) + term * displ
-            end do
-            do i = j + 1, num_points
-                displ = points(:,i) - points(:,j)
-                term = s * norm2(displ)**(-s - 2.0_rk)
-                grad(:,j) = grad(:,j) + term * displ
-            end do
-            grad(:,j) = grad(:,j) - &
-                & dot_product(grad(:,j), points(:,j)) * points(:,j)
-        end do
-    end subroutine riesz_energy_gradient
 
 
     pure subroutine riesz_energy_force(points, ener, force)
@@ -656,16 +633,14 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     real(rk) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
 
-#ifdef PCREO_GRAD_DESC
-#ifdef PCREO_TRACK_ANGLE
+#if defined(PCREO_GRAD_DESC) .and. defined(PCREO_TRACK_ANGLE)
     real(rk) :: step_angle
     real(rk) :: new_force(d + 1, num_points)
-#endif
-#else
+#elif defined(PCREO_BFGS)
     real(rk) :: new_points(d + 1, num_points)
     real(rk) :: new_energy, new_force(d + 1, num_points)
-    real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points)
     real(rk) :: step_direction(d + 1, num_points)
+    real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points)
     real(rk), dimension(d + 1, num_points) :: delta_points, delta_gradient
 #ifdef PCREO_TRACK_ANGLE
     real(rk) :: step_angle
@@ -678,13 +653,16 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_parameters
     write(*,*)
     call initialize_point_configuration(points, energy, force)
-#ifndef PCREO_GRAD_DESC
+#ifdef PCREO_BFGS
     call identity_matrix_4(inv_hess)
 #endif
     write(*,*)
 
     ! TODO: Is there a more natural choice of initial step size?
     step_size = 1.0E-10_rk
+#ifdef PCREO_TRACK_ANGLE
+    step_angle = 0.0_rk
+#endif
 
     iteration_count = 0
     cur_time = current_time()
@@ -695,24 +673,21 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call print_optimization_status
 
     do
-#ifdef PCREO_GRAD_DESC
+#if defined(PCREO_GRAD_DESC)
 
         step_size = quadratic_line_search(points, energy, force, step_size)
-        if (step_size == 0.0_rk) then
-            call print_optimization_status
-            call save_point_file(points, iteration_count)
-            write(*,*) "Convergence has been achieved (up to numerical&
-                    & round-off error). Exiting."
-            stop
-        end if
+        call check_step_size
         points = points + step_size * force
         call constrain_points(points)
+#ifdef PCREO_TRACK_ANGLE
         call riesz_energy_force(points, energy, new_force)
-        step_angle = sum(force * new_force) / &
-            & (norm2(force) * norm2(new_force))
+        step_angle = sum(force * new_force) / (norm2(force) * norm2(new_force))
         force = new_force
-
 #else
+        call riesz_energy_force(points, energy, force)
+#endif
+
+#elif defined(PCREO_BFGS)
 
 #ifdef PCREO_TRACK_ANGLE
         ! Multiply inverse hessian by force to obtain step direction
@@ -728,22 +703,15 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         ! Multiply inverse hessian by negative gradient to obtain step direction
         call matrix_multiply_42(step_direction, inv_hess, force)
 #endif
-        step_size = quadratic_line_search(points, energy, &
-                & step_direction, step_size)
-        if (step_size == 0.0_rk) then
-            call print_optimization_status
-            call save_point_file(points, iteration_count)
-            write(*,*) "Convergence has been achieved (up to numerical&
-                    & round-off error). Exiting."
-            stop
-        end if
+        step_size = quadratic_line_search( &
+                & points, energy, step_direction, step_size)
+        call check_step_size
         new_points = points + step_size * step_direction
         call constrain_points(new_points)
         delta_points = new_points - points
         call riesz_energy_force(new_points, new_energy, new_force)
         delta_gradient = force - new_force
-        call bfgs_update_inverse_hessian( &
-                & inv_hess, delta_points, delta_gradient)
+        call bfgs_update_inverse_hessian(inv_hess, delta_points, delta_gradient)
         points = new_points
         energy = new_energy
         force = new_force
@@ -799,5 +767,16 @@ contains
         write(*,'('//rf//')') step_size
 #endif
     end subroutine print_optimization_status
+
+
+    subroutine check_step_size
+        if (step_size == 0.0_rk) then
+            call print_optimization_status
+            call save_point_file(points, iteration_count)
+            write(*,*) "Convergence has been achieved (up to numerical&
+                    & round-off error). Exiting."
+            stop
+        end if
+    end subroutine check_step_size
 
 end program pcreo_sphere
