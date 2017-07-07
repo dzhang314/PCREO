@@ -1,14 +1,13 @@
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
-! pcreo_sphere_bfgs_hc - Point Configuration Riesz Energy Optimizer            !
-!                        Optimized for Use on Unit Hyperspheres                !
-!                        BFGS Version                                          !
-!                        Hardcoded Inputs                                      !
+! pcreo_sphere - Point Configuration Riesz Energy Optimizer                    !
+!                Optimized for Use on Unit Hyperspheres                        !
 !                                                                              !
-! This program generates point configurations on the unit d-sphere embedded in !
-! (d+1)-dimensional Euclidean space and optimizes their Riesz s-energy by the  !
-! BFGS algorithm. It differs from the generic version of pcreo in that certain !
-! structural optimizations have been performed which only make sense for unit  !
+! PCreo_Sphere is a Fortran 2008 program that generates point configurations   !
+! on the unit d-sphere embedded in (d+1)-dimensional Euclidean space and       !
+! optimizes their Riesz s-energy, using either gradient descent or the BFGS    !
+! algorithm. It differs from the generic version of PCreo in that certain      !
+! optimizations have been performed which only make sense for unit             !
 ! (hyper)spheres.                                                              !
 !                                                                              !
 ! In particular, because constraint equation of a sphere is so simple          !
@@ -16,27 +15,44 @@
 ! and the calculations of constraint values and gradients have been inlined    !
 ! wherever they are needed. This saves numerous unnecessary subroutine calls.  !
 !                                                                              !
-! In addition, startup time is significantly improved by implementing a faster !
-! random point selection algorithm based on the Box-Muller transform, which    !
-! involves no trial-and-error. (The original algorithm needed to reject points !
-! which did not correctly project down to the desired surface.)                !
+! PCreo_Sphere offers numerous compile-time options which are configurable via !
+! Fortran preprocessor (fpp) directives. The following preprocessor            !
+! identifiers may be defined to configure PCreo_Sphere:                        !
 !                                                                              !
-! Note that, unlike the generic version of pcreo, this program uses MKL BLAS   !
-! subroutines throughout to speed up the matrix arithmetic required for the    !
-! BFGS algorithm. It is therefore highly recommended to compile this program   !
-! with a recent version of the Intel Fortran compiler, with full optimizations !
-! enabled, against a recent version of the Intel MKL libraries.                !
+!   PCREO_GRAD_DESC   -- Use gradient descent to optimize point                !
+!                        configuations. If not defined, PCreo_Sphere defaults  !
+!                        to the BFGS algorithm.                                !
+!   PCREO_USE_MKL     -- Use the Intel Math Kernel Libraries to speed up       !
+!                        matrix arithmetic. Requires use of the Intel Fortran  !
+!                        compiler.                                             !
+!   PCREO_SINGLE_PREC -- Use single-precision (32-bit) floating-point numbers  !
+!                        to represent and optimize point configurations.       !
+!                        If not defined, PCreo_Sphere defaults to              !
+!                        double-precision (64-bit) floating point numbers.     !
+!   PCREO_QUAD_PREC   -- Use quad-precision (128-bit) floating-point numbers   !
+!                        to represent and optimize point configurations.       !
+!                        If not defined, PCreo_Sphere defaults to              !
+!                        double-precision (64-bit) floating point numbers.     !
+!                        This option takes precedence over PCREO_SINGLE_PREC   !
+!                        if both are simultaneously defined.                   !
+!   PCREO_TRACK_ANGLE -- Track the normalized dot product between the step     !
+!                        directions of the previous two iterations of gradient !
+!                        descent or BFGS. This measures how much they overlap, !
+!                        giving an indication of how sharply the step          !
+!                        direction is turning. +1 indicates no turning at all, !
+!                        while -1 indicates a full 180-degree reversal.        !
+!                        This value is displayed as an extra column on the     !
+!                        optimization status table printed to the console.     !
 !                                                                              !
-! In addition, because BLAS subroutines are not kind-generic (i.e. dgemv can   !
-! only multiply double precision matrices, not single precision), this version !
-! of pcreo is specialized to double-precision calculations, and does not offer !
-! a single global precision switch.                                            !
+! Note that it is only necessary to #define these identifiers to enable their  !
+! associated options. Their values do not matter, so even if defined as 0 or   !
+! .false., they will still be active.                                          !
 !                                                                              !
-! Note also that this program does not accept command-line arguments. Instead, !
-! all parameters (number of points, value of s, etc.) have been made           !
-! compile-time constants, hardcoded in the constants module below. This        !
-! provides a significant speed boost with the Intel Fortran compiler, at the   !
-! inconvenience of having to re-compile for every set of parameters.           !
+! For performance reasons, it is highly recommended to use a recent version of !
+! the Intel Fortran compiler, with full optimizations enabled, to compile      !
+! PCreo_Sphere. At the time of writing (Summer 2017), Intel Fortran is able    !
+! to make far more extensive vectorization optimizations than its competitors, !
+! beating (say) GFortran by roughly an order of magnitude.                     !
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
