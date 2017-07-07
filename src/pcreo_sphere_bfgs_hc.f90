@@ -1,4 +1,3 @@
-#define PCREO_USE_MKL
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
 ! pcreo_sphere_bfgs_hc - Point Configuration Riesz Energy Optimizer            !
@@ -43,6 +42,12 @@
 
 
 
+#if defined(PCREO_USE_MKL) .and. defined(PCREO_QUAD_PREC)
+#error "Intel MKL does not support quad-precision arithmetic."
+#endif
+
+
+
 module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
 ! The constants module contains basic constants and parameters used throughout !
@@ -50,21 +55,24 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+    use, intrinsic :: iso_fortran_env, only : real32, real64, real128
     implicit none
 
 #ifdef PCREO_USE_MKL
 #include "mkl_blas.fi"
-    integer, parameter :: rk = selected_real_kind(15, 307)  ! IEEE double prec.
+#endif
+
+#if defined(PCREO_QUAD_PREC)
+    integer, parameter :: rk = real128
+#elif defined(PCREO_SINGLE_PREC)
+    integer, parameter :: rk = real32
 #else
-    integer, parameter :: sp = selected_real_kind(6, 37)    ! IEEE single prec.
-    integer, parameter :: dp = selected_real_kind(15, 307)  ! IEEE double prec.
-    integer, parameter :: qp = selected_real_kind(33, 4931) ! IEEE quad prec.
-    integer, parameter :: rk = dp
+    integer, parameter :: rk = real64
 #endif
 
     real(rk), parameter :: s = 2.0_rk
     integer, parameter :: d = 3
-    integer, parameter :: num_points = 100
+    integer, parameter :: num_points = 1000
 
     real(rk), parameter :: print_time = 0.1_rk ! print 10 times per second
     real(rk), parameter :: save_time = 15.0_rk ! save every 15 seconds
@@ -190,7 +198,11 @@ contains
         real(rk), intent(in), dimension(d + 1, num_points) :: v, w
 
 #ifdef PCREO_USE_MKL
+#ifdef PCREO_SINGLE_PREC
+        dot = sdot(num_vars, v, 1, w, 1)
+#else
         dot = ddot(num_vars, v, 1, w, 1)
+#endif
 #else
         integer :: i, j
 
@@ -210,7 +222,11 @@ contains
         real(rk), intent(in) :: b(d + 1, num_points)
 
 #ifdef PCREO_USE_MKL
+#ifdef PCREO_SINGLE_PREC
+        call ssymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
+#else
         call dsymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
+#endif
 #else
         integer :: i, j, k, l
 
@@ -234,7 +250,11 @@ contains
         real(rk), intent(in) :: b(d + 1, num_points)
 
 #ifdef PCREO_USE_MKL
+#ifdef PCREO_SINGLE_PREC
+        call ssymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
+#else
         call dsymv('U', num_vars, -1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
+#endif
 #else
         integer :: i, j, k, l
 
@@ -257,7 +277,11 @@ contains
         real(rk), intent(in) :: c, x(d + 1, num_points), y(d + 1, num_points)
 
 #ifdef PCREO_USE_MKL
+#ifdef PCREO_SINGLE_PREC
+        call ssyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
+#else
         call dsyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
+#endif
 #else
         integer :: i, j, k, l
 
@@ -339,7 +363,7 @@ module line_search !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 contains
 
-    include "../include/quadratic_line_search.f90"
+#include "../include/quadratic_line_search.f90"
 
 end module line_search
 
@@ -395,7 +419,7 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do
 #ifdef PCREO_TRACK_ANGLE
         ! Multiply inverse hessian by negative gradient to obtain step direction
-        call matrix_multiply_42(new_step_direction, inv_hess, old_gradient)
+        call matrix_multiply_neg_42(new_step_direction, inv_hess, old_gradient)
         if (iteration_count > 0) then
             step_angle = sum(step_direction * new_step_direction) / &
                     & (norm2(step_direction) * norm2(new_step_direction))
@@ -405,7 +429,7 @@ program pcreo_sphere_bfgs_hc !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         step_direction = new_step_direction
 #else
         ! Multiply inverse hessian by negative gradient to obtain step direction
-        call matrix_multiply_42(step_direction, inv_hess, old_gradient)
+        call matrix_multiply_neg_42(step_direction, inv_hess, old_gradient)
 #endif
         step_size = quadratic_line_search(old_points, old_energy, &
                 & step_direction, step_size)
