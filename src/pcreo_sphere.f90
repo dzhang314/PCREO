@@ -16,25 +16,44 @@
 ! wherever they are needed. This saves numerous unnecessary subroutine calls.  !
 !                                                                              !
 ! PCreo_Sphere offers numerous compile-time options which are configurable via !
-! Fortran preprocessor (fpp) directives. The following preprocessor            !
-! identifiers may be defined to configure PCreo_Sphere:                        !
+! Fortran preprocessor (fpp) directives. The following preprocessor flags may  !
+! be defined to configure PCreo_Sphere:                                        !
+!                                                                              !
+!   PCREO_BFGS        -- Use the BFGS algorithm to optimize point              !
+!                        configurations. This is PCreo_Sphere's default        !
+!                        nonlinear optimization algorithm, so defining this    !
+!                        flag is no different from not specifying an           !
+!                        optimization algorithm at all. Yields to              !
+!                        PCREO_GRAD_DESC if both are simultaneously defined.   !
 !                                                                              !
 !   PCREO_GRAD_DESC   -- Use gradient descent to optimize point                !
 !                        configuations. If not defined, PCreo_Sphere defaults  !
 !                        to the BFGS algorithm.                                !
+!                                                                              !
 !   PCREO_USE_MKL     -- Use the Intel Math Kernel Libraries to speed up       !
 !                        matrix arithmetic. Requires use of the Intel Fortran  !
 !                        compiler.                                             !
+!                                                                              !
 !   PCREO_SINGLE_PREC -- Use single-precision (32-bit) floating-point numbers  !
 !                        to represent and optimize point configurations.       !
 !                        If not defined, PCreo_Sphere defaults to              !
 !                        double-precision (64-bit) floating point numbers.     !
+!                                                                              !
+!   PCREO_DOUBLE_PREC -- Use double-precision (64-bit) floating-point numbers  !
+!                        to represent and optimize point configurations.       !
+!                        This is PCreo_Sphere's default numeric precision,     !
+!                        so defining this flag is no different from not        !
+!                        defining a precision flag at all. Yields to           !
+!                        PCREO_SINGLE_PREC and PCREO_QUAD_PREC if either is    !
+!                        simultaneously defined.                               !
+!                                                                              !
 !   PCREO_QUAD_PREC   -- Use quad-precision (128-bit) floating-point numbers   !
 !                        to represent and optimize point configurations.       !
 !                        If not defined, PCreo_Sphere defaults to              !
 !                        double-precision (64-bit) floating point numbers.     !
 !                        This option takes precedence over PCREO_SINGLE_PREC   !
 !                        if both are simultaneously defined.                   !
+!                                                                              !
 !   PCREO_TRACK_ANGLE -- Track the normalized dot product between the step     !
 !                        directions of the previous two iterations of gradient !
 !                        descent or BFGS. This measures how much they overlap, !
@@ -43,6 +62,7 @@
 !                        while -1 indicates a full 180-degree reversal.        !
 !                        This value is displayed as an extra column on the     !
 !                        optimization status table printed to the console.     !
+!                                                                              !
 !   PCREO_SYMMETRY                                                             !
 !                                                                              !
 ! Note that it is only necessary to #define these identifiers to enable their  !
@@ -502,7 +522,7 @@ module linear_algebra_4 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 contains
 
     real(rk) function dot_product_2(v, w) result (dot)
-        real(rk), intent(in), contiguous, dimension(d + 1, num_points) :: v, w
+        real(rk), intent(in), dimension(d + 1, num_points) :: v, w
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         dot = sdot(num_vars, v, 1, w, 1)
@@ -522,9 +542,9 @@ contains
 
 
     subroutine matrix_multiply_42(c, A, b)
-        real(rk), intent(out), contiguous :: c(d + 1, num_points)
-        real(rk), intent(in), contiguous :: &
-                & A(d + 1, num_points, d + 1, num_points), b(d + 1, num_points)
+        real(rk), intent(out) :: c(d + 1, num_points)
+        real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(in) :: b(d + 1, num_points)
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
@@ -548,11 +568,8 @@ contains
 
 
     subroutine symmetric_update_4(A, c, x, y)
-        real(rk), intent(inout), contiguous :: &
-                & A(d + 1, num_points, d + 1, num_points)
-        real(rk), intent(in) :: c
-        real(rk), intent(in), contiguous :: &
-                & x(d + 1, num_points), y(d + 1, num_points)
+        real(rk), intent(inout) :: A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(in) :: c, x(d + 1, num_points), y(d + 1, num_points)
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call ssyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
@@ -570,8 +587,7 @@ contains
 
 
     subroutine identity_matrix_4(A)
-        real(rk), intent(out), contiguous :: &
-                & A(d + 1, num_points, d + 1, num_points)
+        real(rk), intent(out) :: A(d + 1, num_points, d + 1, num_points)
 
 #if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
         call slaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
@@ -647,7 +663,6 @@ contains
         new_points = points + step_size * step_direction
         call constrain_points(new_points)
         new_energy = riesz_energy(new_points)
-
         ! If the new energy is less than the old energy, then we can afford
         ! to be a bit more ambitious. We try a larger step size.
         if (new_energy < energy) then
@@ -859,7 +874,6 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     end do
 
 #endif
-
 
 contains
 
