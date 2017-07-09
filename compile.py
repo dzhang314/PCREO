@@ -3,6 +3,7 @@ import itertools
 import os
 import platform
 import subprocess
+import sys
 from uuid import uuid4
 
 
@@ -20,8 +21,9 @@ def rm_glob(glob_str):
         os.remove(path)
 
 
-def compile_pcreo_sphere(exe_name='pcreo_sphere', flags=None,
-                         use_mkl=False, parallelize=False,
+def compile_pcreo_sphere(exe_name='pcreo_sphere',
+                         src_name='src/pcreo_sphere.f90',
+                         flags=None, use_mkl=False, parallelize=False,
                          clear_mod_files=True, clear_obj_files=True):
     if clear_mod_files: rm_glob('*.mod')
     if clear_obj_files: rm_glob('*.obj')
@@ -56,7 +58,7 @@ def compile_pcreo_sphere(exe_name='pcreo_sphere', flags=None,
             platform_select(' -D', ' /D') + flag for flag in flags])
         script_file.write(platform_select(
             '-fpp{0} \\\n', '/fpp{0} ^\n').format(flag_line))
-        script_file.write('src/pcreo_sphere.f90\n')
+        script_file.write(src_name + '\n')
     subprocess.run(platform_select(['bash', script_name], [script_name]))
     os.remove(script_name)
     if clear_mod_files: rm_glob('*.mod')
@@ -80,41 +82,42 @@ PCREO_ALGORITHMS = [
 ]
 
 
-rm_glob('bin/*.exe')
-
-for alg_flag, alg_name in PCREO_ALGORITHMS:
-    for prec_flag, prec_name in MKL_PRECISIONS:
-        for options in itertools.product([True, False], repeat=3):
-            exe_name = 'bin/pcreo_sphere'
-            exe_name += '_' + alg_name
-            exe_name += '_' + prec_name
-            exe_name += '_mkl'
-            flags = [alg_flag, prec_flag]
-            parallelize, track_angle, symmetry = options
-            if parallelize:
-                exe_name += '_par'
-            if track_angle:
-                exe_name += '_ang'
-                flags.append("PCREO_TRACK_ANGLE")
-            if symmetry:
-                exe_name += '_sym'
-                flags.append("PCREO_TRACK_ANGLE")
-            compile_pcreo_sphere(exe_name=exe_name, flags=flags,
-                                 use_mkl=True, parallelize=parallelize)
-    for prec_flag, prec_name in PCREO_PRECISIONS:
-        for options in itertools.product([True, False], repeat=3):
-            exe_name = 'bin/pcreo_sphere'
-            exe_name += '_' + alg_name
-            exe_name += '_' + prec_name
-            flags = [alg_flag, prec_flag]
-            parallelize, track_angle, symmetry = options
-            if parallelize:
-                exe_name += '_par'
-            if track_angle:
-                exe_name += '_ang'
-                flags.append("PCREO_TRACK_ANGLE")
-            if symmetry:
-                exe_name += '_sym'
-                flags.append("PCREO_TRACK_ANGLE")
-            compile_pcreo_sphere(exe_name=exe_name, flags=flags,
-                                 use_mkl=False, parallelize=parallelize)
+if __name__ == '__main__':
+    if platform.system() == 'Windows': rm_glob('bin/*.exe')
+    if sys.argv[1].lower() == 'all':
+        for alg_flag, alg_name in PCREO_ALGORITHMS:
+            for prec_flag, prec_name in MKL_PRECISIONS:
+                for options in itertools.product([True, False], repeat=3):
+                    exe_name = 'bin/pcreo_sphere'
+                    exe_name += '_' + alg_name
+                    exe_name += '_' + prec_name
+                    exe_name += '_mkl'
+                    flags = [alg_flag, prec_flag]
+                    parallelize, track_angle, symmetry = options
+                    if parallelize:
+                        exe_name += '_par'
+                    if track_angle:
+                        exe_name += '_ang'
+                        flags.append("PCREO_TRACK_ANGLE")
+                    if symmetry:
+                        exe_name += '_sym'
+                        flags.append("PCREO_TRACK_ANGLE")
+                    compile_pcreo_sphere(exe_name=exe_name, flags=flags,
+                                         use_mkl=True, parallelize=parallelize)
+            for prec_flag, prec_name in PCREO_PRECISIONS:
+                for options in itertools.product([True, False], repeat=3):
+                    exe_name = 'bin/pcreo_sphere'
+                    exe_name += '_' + alg_name
+                    exe_name += '_' + prec_name
+                    flags = [alg_flag, prec_flag]
+                    parallelize, track_angle, symmetry = options
+                    if parallelize:
+                        exe_name += '_par'
+                    if track_angle:
+                        exe_name += '_ang'
+                        flags.append("PCREO_TRACK_ANGLE")
+                    if symmetry:
+                        exe_name += '_sym'
+                        flags.append("PCREO_TRACK_ANGLE")
+                    compile_pcreo_sphere(exe_name=exe_name, flags=flags,
+                                         use_mkl=False, parallelize=parallelize)
