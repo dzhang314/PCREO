@@ -86,7 +86,7 @@ PCREO_ALGORITHMS = [
 
 if __name__ == '__main__':
     if platform.system() == 'Windows': rm_glob('bin/*.exe')
-    if sys.argv[1].lower() == 'all':
+    if len(sys.argv) >= 2 and sys.argv[1].lower() == 'all':
         for alg_flag, alg_name in PCREO_ALGORITHMS:
             for prec_flag, prec_name in MKL_PRECISIONS:
                 for options in itertools.product([True, False], repeat=3):
