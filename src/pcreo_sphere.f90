@@ -69,6 +69,10 @@
 ! associated options. Their values do not matter, so even if defined as 0 or   !
 ! .false., they will still be active.                                          !
 !                                                                              !
+!   PCREO_PARAM_S                                                              !
+!   PCREO_PARAM_D                                                              !
+!   PCREO_PARAM_N                                                              !
+!                                                                              !
 ! For performance reasons, it is highly recommended to use a recent version of !
 ! the Intel Fortran compiler, with full optimizations enabled, to compile      !
 ! PCreo_Sphere. At the time of writing (Summer 2017), Intel Fortran is able    !
@@ -95,6 +99,18 @@
 #define PCREO_DOUBLE_PREC
 #endif
 
+#if .not. defined(PCREO_PARAM_S)
+#define PCREO_PARAM_S 1.0_rk
+#endif
+
+#if .not. defined(PCREO_PARAM_D)
+#define PCREO_PARAM_D 2
+#endif
+
+#if .not. defined(PCREO_PARAM_N)
+#define PCREO_PARAM_N 100
+#endif
+
 
 
 module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -118,9 +134,9 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     character(len=9), parameter :: rf = 'ES44.35E4'
 #endif
 
-    real(rk), parameter :: s = 1.0_rk
-    integer, parameter :: d = 2
-    integer, parameter :: num_points = 27
+    real(rk), parameter :: s = PCREO_PARAM_S
+    integer, parameter :: d = PCREO_PARAM_D
+    integer, parameter :: num_points = PCREO_PARAM_N
     real(rk), parameter :: print_time = 0.1_rk ! print 10 times per second
     real(rk), parameter :: save_time = 15.0_rk ! save every 15 seconds
 
