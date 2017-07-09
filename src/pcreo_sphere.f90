@@ -277,10 +277,10 @@ contains
             write(*,'(A)') "-----------+----------------+&
                     &----------------+----------------"
         else if (rk == real64) then
-            write(*,'(A)') "#Iterations| Riesz s-energy         |&
+            write(*,'(A)') "#Iterations| Riesz s-energy          |&
                     & RMS Gradient           | Step size"
             write(*,'(A)') "-----------+-------------------------+&
-                    &------------------------+------------------------"
+                    &-------------------------+-------------------------"
         else if (rk == real128) then
             write(*,'(A)') "#Iterations|&
                     & Riesz s-energy                              |&
