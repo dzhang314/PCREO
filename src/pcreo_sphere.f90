@@ -278,7 +278,7 @@ contains
                     &----------------+----------------"
         else if (rk == real64) then
             write(*,'(A)') "#Iterations| Riesz s-energy          |&
-                    & RMS Gradient           | Step size"
+                    & RMS Gradient            | Step size"
             write(*,'(A)') "-----------+-------------------------+&
                     &-------------------------+-------------------------"
         else if (rk == real128) then

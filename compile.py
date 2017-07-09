@@ -46,14 +46,12 @@ def compile_pcreo_sphere(exe_name='pcreo_sphere',
             script_file.write(platform_select(
                 'ifort \\\n',
                 'ifort ^\n'))
+        script_file.write(platform_select(
+            '-warn all -no-wrap-margin -traceback -fast ',
+            '/warn:all /wrap-margin- /traceback /fast '))
         if parallelize:
-            script_file.write(platform_select(
-                '-warn all -no-wrap-margin -fast -parallel \\\n',
-                '/warn:all /wrap-margin- /fast /Qparallel ^\n'))
-        else:
-            script_file.write(platform_select(
-                '-warn all -no-wrap-margin -fast \\\n',
-                '/warn:all /wrap-margin- /fast ^\n'))
+            script_file.write(platform_select('-parallel ', '/Qparallel '))
+        script_file.write(platform_select('\\\n', '^\n'))
         script_file.write(platform_select(
             '-o {0} \\\n', '/o {0} ^\n').format(exe_name))
         flag_line = ' '.join([
