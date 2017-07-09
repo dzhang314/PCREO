@@ -34,7 +34,7 @@ def compile_pcreo_sphere(exe_name='pcreo_sphere',
     with open(script_name, 'w+') as script_file:
         # import Intel Fortran environment variables
         script_file.write(platform_select(
-            'module load Intel', # for Lmod systems
+            'module load Intel\n', # for Lmod systems
             'call "C:/Program Files (x86)/IntelSWTools/'
             'compilers_and_libraries_2017.4.210/windows/'
             'bin\ipsxe-comp-vars.bat" intel64\n'))
