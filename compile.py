@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import glob
 import itertools
 import os
@@ -121,3 +123,6 @@ if __name__ == '__main__':
                         flags.append("PCREO_TRACK_ANGLE")
                     compile_pcreo_sphere(exe_name=exe_name, flags=flags,
                                          use_mkl=False, parallelize=parallelize)
+    elif len(sys.argv) >= 3:
+        compile_pcreo_sphere(exe_name=sys.argv[1], src_name=sys.argv[2],
+                             flags=sys.argv[3:], use_mkl=True)
