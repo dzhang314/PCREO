@@ -125,6 +125,6 @@ if __name__ == '__main__':
                                          use_mkl=False, parallelize=parallelize)
     elif len(sys.argv) >= 3:
         compile_pcreo_sphere(exe_name=sys.argv[1], src_name=sys.argv[2],
-                             flags=sys.argv[3:], use_mkl=True)
+                             flags=sys.argv[3:], use_mkl=False)
     else:
         print("Unsupported usage")
