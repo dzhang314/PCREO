@@ -798,24 +798,22 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     use pcreo_utilities
     implicit none
 
-    real(rk) :: points(d + 1, num_points)
-    real(rk) :: energy, new_energy, force(d + 1, num_points)
+    real(rk) :: points(d + 1, num_points), new_points(d + 1, num_points)
+    real(rk) :: energy, new_energy
+    real(rk) :: force(d + 1, num_points), new_force(d + 1, num_points)
     real(rk) :: step_size
     real(rk) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
 
-#if defined(PCREO_GRAD_DESC) .and. defined(PCREO_TRACK_ANGLE)
-    real(rk) :: step_angle
-    real(rk) :: new_force(d + 1, num_points)
-#elif defined(PCREO_BFGS)
-    real(rk) :: new_points(d + 1, num_points), new_force(d + 1, num_points)
-    real(rk) :: step_direction(d + 1, num_points)
+#ifdef PCREO_BFGS
+    real(rk) :: step_direction(d + 1, num_points), 
+    real(rk) :: new_step_direction(d + 1, num_points)
     real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points)
     real(rk), dimension(d + 1, num_points) :: delta_points, delta_gradient
+#endif
+
 #ifdef PCREO_TRACK_ANGLE
     real(rk) :: step_angle
-    real(rk) :: new_step_direction(d + 1, num_points)
-#endif
 #endif
 
     call print_welcome_message
@@ -829,11 +827,12 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     call identity_matrix_4(inv_hess)
     step_direction = force
 #endif
-    step_size = 1.0E-10_rk
+
 #ifdef PCREO_TRACK_ANGLE
     step_angle = 0.0_rk
 #endif
 
+    step_size = 1.0E-10_rk
     iteration_count = 0
     cur_time = current_time()
     last_print_time = cur_time
@@ -847,18 +846,17 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do
         step_size = quadratic_line_search(points, energy, force, step_size)
         call check_step_size
-        points = points + step_size * force
-        call constrain_points(points)
+        new_points = points + step_size * force
+        call constrain_points(new_points)
+        call riesz_energy_force(new_points, new_energy, new_force)
+        call ensure_energy_decrease
 #ifdef PCREO_TRACK_ANGLE
-        call riesz_energy_force(points, new_energy, new_force)
         step_angle = dot_product_2(force, new_force) / &
                 & (norm2(force) * norm2(new_force))
-        force = new_force
-#else
-        call riesz_energy_force(points, new_energy, force)
 #endif
-        call ensure_energy_decrease
+        points = new_points
         energy = new_energy
+        force = new_force
         call finish_iteration
     end do
 
@@ -872,21 +870,18 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         call constrain_points(new_points)
         delta_points = new_points - points
         call riesz_energy_force(new_points, new_energy, new_force)
+        call ensure_energy_decrease
         delta_gradient = force - new_force
         call bfgs_update_inverse_hessian(inv_hess, delta_points, delta_gradient)
+        call matrix_multiply_42(new_step_direction, inv_hess, new_force)
+#ifdef PCREO_TRACK_ANGLE
+        step_angle = dot_product_2(step_direction, new_step_direction) / &
+                & (norm2(step_direction) * norm2(new_step_direction))
+#endif
         points = new_points
         energy = new_energy
         force = new_force
-#ifdef PCREO_TRACK_ANGLE
-        call matrix_multiply_42(new_step_direction, inv_hess, force)
-        if (iteration_count > 0) then
-            step_angle = dot_product_2(step_direction, new_step_direction) / &
-                    & (norm2(step_direction) * norm2(new_step_direction))
-        end if
         step_direction = new_step_direction
-#else
-        call matrix_multiply_42(step_direction, inv_hess, force)
-#endif
         call finish_iteration
     end do
 
