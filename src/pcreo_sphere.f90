@@ -902,7 +902,7 @@ contains
         inquire(file="pcreo_input.csv", exist=ex)
         if (ex) then
             write(*,*) "Loading initial point configuration from file..."
-            open(newunit=u, file="initial_configuration.txt")
+            open(newunit=u, file="pcreo_input.csv")
             read(u,*) points
             close(u)
         else
