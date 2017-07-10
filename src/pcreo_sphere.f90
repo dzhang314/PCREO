@@ -137,8 +137,9 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     real(rk), parameter :: s = PCREO_PARAM_S
     integer, parameter :: d = PCREO_PARAM_D
     integer, parameter :: num_points = PCREO_PARAM_N
-    real(rk), parameter :: print_time = 0.1_rk ! print 10 times per second
-    real(rk), parameter :: save_time = 15.0_rk ! save every 15 seconds
+    real(rk), parameter :: print_time = 5.0_rk      ! print every 5 seconds
+    real(rk), parameter :: save_time = huge(1.0_rk) ! don't save intermediate
+                                                    ! point configurations
 
 #ifdef PCREO_USE_MKL
     include "mkl_blas.fi"
