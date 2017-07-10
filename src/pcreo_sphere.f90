@@ -806,7 +806,7 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     integer :: iteration_count
 
 #ifdef PCREO_BFGS
-    real(rk) :: step_direction(d + 1, num_points), 
+    real(rk) :: step_direction(d + 1, num_points)
     real(rk) :: new_step_direction(d + 1, num_points)
     real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points)
     real(rk), dimension(d + 1, num_points) :: delta_points, delta_gradient
@@ -927,6 +927,7 @@ contains
 
 
     subroutine terminate_iteration
+        call print_optimization_status
         call save_point_file(points, iteration_count)
         write(*,*) "Convergence has been achieved (up to numerical&
                 & round-off error). Exiting."
