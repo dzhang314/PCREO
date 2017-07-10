@@ -299,9 +299,9 @@ contains
         integer, intent(in) :: idx
 
         integer :: i, j, u
-        character(len=34) :: fname
+        character(len=20) :: fname
 
-        write(fname,"(a,i10.10,a)") "point_configuration_", idx, ".csv"
+        write(fname,"(a,i10.10,a)") "pcreo_", idx, ".csv"
         open(file=fname, newunit=u)
         do j = 1, num_points
             do i = 1, d + 1
@@ -899,7 +899,7 @@ contains
         integer :: u
         logical :: ex
 
-        inquire(file="initial_configuration.txt", exist=ex)
+        inquire(file="pcreo_input.csv", exist=ex)
         if (ex) then
             write(*,*) "Loading initial point configuration from file..."
             open(newunit=u, file="initial_configuration.txt")
