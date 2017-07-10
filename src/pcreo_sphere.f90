@@ -799,7 +799,7 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     implicit none
 
     real(rk) :: points(d + 1, num_points)
-    real(rk) :: energy, force(d + 1, num_points)
+    real(rk) :: energy, new_energy, force(d + 1, num_points)
     real(rk) :: step_size
     real(rk) :: last_print_time, last_save_time, cur_time
     integer :: iteration_count
@@ -808,8 +808,7 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     real(rk) :: step_angle
     real(rk) :: new_force(d + 1, num_points)
 #elif defined(PCREO_BFGS)
-    real(rk) :: new_points(d + 1, num_points)
-    real(rk) :: new_energy, new_force(d + 1, num_points)
+    real(rk) :: new_points(d + 1, num_points), new_force(d + 1, num_points)
     real(rk) :: step_direction(d + 1, num_points)
     real(rk) :: inv_hess(d + 1, num_points, d + 1, num_points)
     real(rk), dimension(d + 1, num_points) :: delta_points, delta_gradient
@@ -851,13 +850,15 @@ program pcreo_sphere !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         points = points + step_size * force
         call constrain_points(points)
 #ifdef PCREO_TRACK_ANGLE
-        call riesz_energy_force(points, energy, new_force)
+        call riesz_energy_force(points, new_energy, new_force)
         step_angle = dot_product_2(force, new_force) / &
                 & (norm2(force) * norm2(new_force))
         force = new_force
 #else
-        call riesz_energy_force(points, energy, force)
+        call riesz_energy_force(points, new_energy, force)
 #endif
+        call ensure_energy_decrease
+        energy = new_energy
         call finish_iteration
     end do
 
@@ -930,15 +931,26 @@ contains
     end subroutine print_optimization_status
 
 
+    subroutine terminate_iteration
+        call save_point_file(points, iteration_count)
+        write(*,*) "Convergence has been achieved (up to numerical&
+                & round-off error). Exiting."
+        stop
+    end subroutine terminate_iteration
+
+
     subroutine check_step_size
         if (step_size < epsilon(step_size)) then
-            call print_optimization_status
-            call save_point_file(points, iteration_count)
-            write(*,*) "Convergence has been achieved (up to numerical&
-                    & round-off error). Exiting."
-            stop
+            call terminate_iteration
         end if
     end subroutine check_step_size
+
+
+    subroutine ensure_energy_decrease
+        if (new_energy >= energy) then
+            call terminate_iteration
+        end if
+    end subroutine ensure_energy_decrease
 
 
     subroutine finish_iteration
