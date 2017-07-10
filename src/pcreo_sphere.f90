@@ -752,7 +752,7 @@ contains
                     ! If no step produces a decrease, no matter how small, then
                     ! we have probably started our search from a local minimum.
                     ! Return zero step size to indicate this.
-                    if (abs(step_size) < epsilon(step_size)) then
+                    if (step_size < epsilon(step_size)) then
                         optimal_step_size = 0.0_rk
                         return
                     end if
@@ -931,7 +931,7 @@ contains
 
 
     subroutine check_step_size
-        if (step_size == 0.0_rk) then
+        if (step_size < epsilon(step_size)) then
             call print_optimization_status
             call save_point_file(points, iteration_count)
             write(*,*) "Convergence has been achieved (up to numerical&

@@ -58,4 +58,4 @@ def submit_job(s, d, n):
     os.remove(script_name)
 
 for _ in range(20):
-    submit_job(2.0, 3, 500)
+    submit_job(2.0, 3, 100)
