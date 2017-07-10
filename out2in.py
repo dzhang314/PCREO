@@ -8,6 +8,6 @@ out_files.sort()
 if len(out_files) == 0:
     print("WARNING: No PCreo output files found.")
 else:
-    os.rename(out_files[-1], 'pcreo_input.txt')
+    os.rename(out_files[-1], 'pcreo_input.csv')
     for name in out_files[:-1]:
         os.remove(name)
