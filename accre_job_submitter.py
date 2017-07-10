@@ -42,6 +42,7 @@ PCREO_QUAD_PREC PCREO_GRAD_DESC PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARA
 ./pcreo_sphere_exe
 rm ./pcreo_sphere_exe
 /home/zhangdk/pcreo/out2in.py
+echo "PCreo job successfully completed"
 """
 
 def submit_job(s, d, n):
