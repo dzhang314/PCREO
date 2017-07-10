@@ -57,7 +57,7 @@ def submit_job(s, d, n, k):
             '<|PARAM_S|>', str(s)).replace(
             '<|PARAM_D|>', str(d)).replace(
             '<|PARAM_N|>', str(n)))
-    subprocess.run(['sbatch', '--array=1:' + str(k), script_name])
+    subprocess.run(['sbatch', '--array=1-' + str(k), script_name])
     os.remove(script_name)
 
 for n in range(20, 51):
