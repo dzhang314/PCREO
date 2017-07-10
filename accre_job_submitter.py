@@ -11,7 +11,7 @@ ACCRE_JOB_TEMPLATE = """\
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=1G
-#SBATCH --time=02:00:00
+#SBATCH --time=0-00:30:00
 #SBATCH --job-name=PCreo_Sphere
 
 module load Anaconda3
@@ -47,7 +47,8 @@ rm ./pcreo_sphere_exe
 echo "PCreo job successfully completed."
 """
 
-def submit_job(s, d, n, k):
+
+def submit_job(s, d, n, k=1):
     s = float(s)
     d = int(d)
     n = int(n)
@@ -57,8 +58,13 @@ def submit_job(s, d, n, k):
             '<|PARAM_S|>', str(s)).replace(
             '<|PARAM_D|>', str(d)).replace(
             '<|PARAM_N|>', str(n)))
-    subprocess.run(['sbatch', '--array=1-' + str(k), script_name])
+    if k == 1:
+        subprocess.run(['sbatch', script_name])
+    else:
+        subprocess.run(['sbatch', '--array=1-' + str(k), script_name])
     os.remove(script_name)
 
-for n in range(20, 51):
-    submit_job(2.0, 3, n, 1000)
+
+for _ in range(1000):
+    for n in range(10, 51):
+        submit_job(2.0, 3, n)
