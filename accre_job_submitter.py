@@ -21,30 +21,73 @@ PARAM_D=<|PARAM_D|>
 PARAM_N=<|PARAM_N|>
 
 echo "Creating output directory..."
-until mkdir /gpfs23/scratch/zhangdk/pcreo_runs/output_data_${SLURM_JOBID}; do sleep 1; done
-until cd /gpfs23/scratch/zhangdk/pcreo_runs/output_data_${SLURM_JOBID}; do sleep 1; done
+mkdir /gpfs23/scratch/zhangdk/pcreo_runs/output_data_${SLURM_JOBID}
+if [ $? -ne 0 ]
+then
+    echo "Could not create output directory. Exiting."
+    exit 101
+fi
+cd /gpfs23/scratch/zhangdk/pcreo_runs/output_data_${SLURM_JOBID}
+if [ $? -ne 0 ]
+then
+    echo "Could not move to output directory. Exiting."
+    exit 102
+fi
+
 echo "Compiling PCreo_Sphere for initial run..."
 /home/zhangdk/pcreo/compile.py ./pcreo_sphere_exe /home/zhangdk/pcreo/src/pcreo_sphere.f90 \
-PCREO_DOUBLE_PREC PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARAM_D} PCREO_PARAM_N=${PARAM_N}
+PCREO_DOUBLE_PREC PCREO_SYMMETRY PCREO_BFGS \
+PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARAM_D} PCREO_PARAM_N=${PARAM_N}
+if [ $? -ne 0 ]
+then
+    echo "PCreo_Sphere compilation failed. Exiting."
+    exit 103
+fi
+
+echo "Performing initial run..."
 ./pcreo_sphere_exe
 rm ./pcreo_sphere_exe
 /home/zhangdk/pcreo/out2in.py
+
 echo "Compiling PCreo_Sphere for extension run..."
 /home/zhangdk/pcreo/compile.py ./pcreo_sphere_exe /home/zhangdk/pcreo/src/pcreo_sphere.f90 \
-PCREO_QUAD_PREC PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARAM_D} PCREO_PARAM_N=${PARAM_N}
+PCREO_QUAD_PREC PCREO_SYMMETRY PCREO_BFGS \
+PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARAM_D} PCREO_PARAM_N=${PARAM_N}
+if [ $? -ne 0 ]
+then
+    echo "PCreo_Sphere compilation failed. Exiting."
+    exit 104
+fi
+
+echo "Performing extension run..."
+./pcreo_sphere_exe
+/home/zhangdk/pcreo/out2in.py
+
+echo "Performing redundant extension run..."
 ./pcreo_sphere_exe
 rm ./pcreo_sphere_exe
 /home/zhangdk/pcreo/out2in.py
+
 echo "Compiling PCreo_Sphere for cleanup run..."
 /home/zhangdk/pcreo/compile.py ./pcreo_sphere_exe /home/zhangdk/pcreo/src/pcreo_sphere.f90 \
-PCREO_QUAD_PREC PCREO_GRAD_DESC PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARAM_D} PCREO_PARAM_N=${PARAM_N}
+PCREO_QUAD_PREC PCREO_SYMMETRY PCREO_GRAD_DESC \
+PCREO_PARAM_S=${PARAM_S}_rk PCREO_PARAM_D=${PARAM_D} PCREO_PARAM_N=${PARAM_N}
+if [ $? -ne 0 ]
+then
+    echo "PCreo_Sphere compilation failed. Exiting."
+    exit 105
+fi
+
+echo "Performing cleanup run..."
 ./pcreo_sphere_exe
 /home/zhangdk/pcreo/out2in.py
+
 echo "Performing redundant cleanup run..."
 ./pcreo_sphere_exe
 rm ./pcreo_sphere_exe
 /home/zhangdk/pcreo/out2in.py
-echo "PCreo job successfully completed."
+
+echo "PCreo job successfully completed. Exiting."
 """
 
 
@@ -65,6 +108,5 @@ def submit_job(s, d, n, k=1):
     os.remove(script_name)
 
 
-for _ in range(1000):
-    for n in range(10, 51):
-        submit_job(2.0, 3, n)
+for n in range(1, 51):
+    submit_job(1.0, 2, n)
