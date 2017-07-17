@@ -304,7 +304,7 @@ contains
         character(len=20) :: fname
         character(len=80) :: line
 
-        write(fname,"(a,i10.10,a)") "pcreo_", idx, ".csv"
+        write(fname,"(a,i10.10,a)") "pcreo-", idx, ".csv"
         open(file=fname, newunit=u)
 
         write(line,*) d
@@ -912,10 +912,10 @@ contains
         integer :: u
         logical :: ex
 
-        inquire(file="pcreo_input.csv", exist=ex)
+        inquire(file="pcreo-input.csv", exist=ex)
         if (ex) then
             write(*,*) "Loading initial point configuration from file..."
-            open(newunit=u, file="pcreo_input.csv")
+            open(newunit=u, file="pcreo-input.csv")
             read(u,*)
             read(u,*)
             read(u,*) points
