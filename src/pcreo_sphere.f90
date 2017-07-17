@@ -295,19 +295,35 @@ contains
     end subroutine print_table_header
 
 
-    subroutine save_point_file(points, idx)
+    subroutine save_point_file(points, energy, force, idx)
         real(rk), intent(in) :: points(d + 1, num_points)
+        real(rk), intent(in) :: energy, force(d + 1, num_points)
         integer, intent(in) :: idx
 
         integer :: i, j, u
         character(len=20) :: fname
+        character(len=80) :: line
 
         write(fname,"(a,i10.10,a)") "pcreo_", idx, ".csv"
         open(file=fname, newunit=u)
+
+        write(line,*) d
+        write(u,'(A,A)',advance='no') trim(adjustl(line)), ", "
+        write(line,*) s
+        write(u,'(A,A)',advance='no') trim(adjustl(line)), ", "
+#ifdef PCREO_SYMMETRY
+        write(line,*) num_external_points + symmetry_group_order * num_points
+#else
+        write(line,*) num_points
+#endif
+        write(u,'(A)') trim(adjustl(line))
+        write(u,'(SP,'//rf//',A)',advance='no') energy, ", "
+        write(u,'(SP,'//rf//')') norm2(force) / sqrt(real(num_points, rk))
+
         do j = 1, num_points
             do i = 1, d + 1
-                if (i > 1) write(u,'(A)',advance="no") ", "
-                write(u,'(SP,'//rf//')',advance="no") points(i,j)
+                if (i > 1) write(u,'(A)',advance='no') ", "
+                write(u,'(SP,'//rf//')',advance='no') points(i,j)
             end do
             write(u,*)
         end do
@@ -900,6 +916,8 @@ contains
         if (ex) then
             write(*,*) "Loading initial point configuration from file..."
             open(newunit=u, file="pcreo_input.csv")
+            read(u,*)
+            read(u,*)
             read(u,*) points
             close(u)
         else
@@ -914,12 +932,12 @@ contains
 
 
     subroutine print_optimization_status
-        write(*,'(I10,A)',advance="no") iteration_count, " |"
-        write(*,'('//rf//',A)',advance="no") energy, " |"
-        write(*,'('//rf//',A)',advance="no") &
+        write(*,'(I10,A)',advance='no') iteration_count, " |"
+        write(*,'('//rf//',A)',advance='no') energy, " |"
+        write(*,'('//rf//',A)',advance='no') &
                 & norm2(force) / sqrt(real(num_points, rk)), " |"
 #ifdef PCREO_TRACK_ANGLE
-        write(*,'('//rf//',A)',advance="no") step_size, " |"
+        write(*,'('//rf//',A)',advance='no') step_size, " |"
         write(*,'('//rf//')') step_angle
 #else
         write(*,'('//rf//')') step_size
@@ -929,7 +947,7 @@ contains
 
     subroutine terminate_iteration
         call print_optimization_status
-        call save_point_file(points, iteration_count)
+        call save_point_file(points, energy, force, iteration_count)
         write(*,*) "Convergence has been achieved (up to numerical&
                 & round-off error). Exiting."
         stop
@@ -958,7 +976,7 @@ contains
             last_print_time = cur_time
         end if
         if (cur_time - last_save_time >= save_time) then
-            call save_point_file(points, iteration_count)
+            call save_point_file(points, energy, force, iteration_count)
             last_save_time = cur_time
         end if
     end subroutine finish_iteration
