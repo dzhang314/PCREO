@@ -11,8 +11,9 @@ ACCRE_JOB_TEMPLATE = """\
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=1G
-#SBATCH --time=0-00:30:00
+#SBATCH --time=0-01:00:00
 #SBATCH --job-name=PCreo_Sphere
+#SBATCH --output=slurm-%j.out
 
 module load Anaconda3
 
