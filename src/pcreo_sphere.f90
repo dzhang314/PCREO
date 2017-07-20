@@ -148,7 +148,7 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #ifdef PCREO_SYMMETRY
     include "../include/icosahedral_symmetry_group.f90"
-    include "../include/icosahedron_vertices.f90"
+    include "../include/icosahedron_vertices_faces.f90"
     integer, parameter :: num_external_points = size(external_points, 2)
     integer, parameter :: symmetry_group_order = size(symmetry_group, 3)
 #endif
