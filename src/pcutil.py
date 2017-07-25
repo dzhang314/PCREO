@@ -1,8 +1,39 @@
 import collections
-import gmpy2
+import itertools
 import os
 import subprocess
 import tempfile
+
+
+import gmpy2
+import networkx
+
+
+################################################################################
+
+
+def dict_append(d, k, v):
+    if k in d:
+        d[k].append(v)
+    else:
+        d[k] = [v]
+    return None
+
+
+def equivalence_classes(items, eq_func):
+    classes = []
+    for item in items:
+        for eq_class in classes:
+            representative = eq_class[0]
+            if eq_func(item, representative):
+                eq_class.append(item)
+                break
+        else:
+            classes.append([item])
+    return tuple(map(tuple, classes))
+
+
+################################################################################
 
 
 def dot_product(v, w):
@@ -520,7 +551,8 @@ def convex_hull_facets(points, qconvex_path='qconvex'):
     qconvex_lines = qconvex_info.stdout.decode('utf-8')\
                                        .split(os.linesep)[1:]
     qconvex_facets = tuple(tuple(map(int, line.split()[1:]))
-                           for line in qconvex_lines)
+                           for line in qconvex_lines
+                           if line)
     return qconvex_facets
 
 
@@ -542,4 +574,25 @@ def icosahedral_nearest_neighbor_graph(run_record, qconvex_path='qconvex'):
         assert len(facet) == 3
         nngraph.add_edges_from(
             itertools.combinations(facet, 2))
+    networkx.set_node_attributes(nngraph, 'weight',
+                                 dict(nngraph.degree_iter()))
     return nngraph
+
+
+def remove_hexagonal_vertices(graph):
+    hexagonal_vertices = [vertex
+                          for vertex, degree in graph.degree_iter()
+                          if degree == 6]
+    graph.remove_nodes_from(hexagonal_vertices)
+    return None
+
+
+def icosahedral_defect_classes(run_record, qconvex_path='qconvex'):
+    nngraph = icosahedral_nearest_neighbor_graph(run_record,
+                                                 qconvex_path=qconvex_path)
+    remove_hexagonal_vertices(nngraph)
+    node_match = networkx.algorithms.isomorphism\
+                         .categorical_node_match('color', 0)
+    return equivalence_classes(networkx.connected_component_subgraphs(nngraph),
+                               lambda g, h: networkx.is_isomorphic(
+                                   g, h, node_match=node_match))
