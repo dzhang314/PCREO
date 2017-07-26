@@ -72,6 +72,8 @@
 !   PCREO_PARAM_S                                                              !
 !   PCREO_PARAM_D                                                              !
 !   PCREO_PARAM_N                                                              !
+!   PCREO_PRINT_TIME                                                           !
+!   PCREO_SAVE_TIME                                                            !
 !                                                                              !
 ! For performance reasons, it is highly recommended to use a recent version of !
 ! the Intel Fortran compiler, with full optimizations enabled, to compile      !
@@ -99,16 +101,25 @@
 #define PCREO_DOUBLE_PREC
 #endif
 
+! Default: 100 particles on the 2-sphere with Coulomb potential
 #if .not. defined(PCREO_PARAM_S)
 #define PCREO_PARAM_S 1.0_rk
 #endif
-
 #if .not. defined(PCREO_PARAM_D)
 #define PCREO_PARAM_D 2
 #endif
-
 #if .not. defined(PCREO_PARAM_N)
 #define PCREO_PARAM_N 100
+#endif
+
+! Default: print optimization status every second
+#if .not. defined(PCREO_PRINT_TIME)
+#define PCREO_PRINT_TIME 1.0_rk
+#endif
+
+! Default: save partially-optimized point configuration every 10 seconds
+#if .not. defined(PCREO_SAVE_TIME)
+#define PCREO_SAVE_TIME 10.0_rk
 #endif
 
 
@@ -137,9 +148,8 @@ module constants !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     real(rk), parameter :: s = PCREO_PARAM_S
     integer, parameter :: d = PCREO_PARAM_D
     integer, parameter :: num_points = PCREO_PARAM_N
-    real(rk), parameter :: print_time = 5.0_rk      ! print every 5 seconds
-    real(rk), parameter :: save_time = huge(1.0_rk) ! don't save intermediate
-                                                    ! point configurations
+    real(rk), parameter :: print_time = PCREO_PRINT_TIME
+    real(rk), parameter :: save_time = PCREO_SAVE_TIME
 
 #ifdef PCREO_USE_MKL
     include "mkl_blas.fi"
