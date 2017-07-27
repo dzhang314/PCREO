@@ -1,10 +1,13 @@
+# Python 3 standard library imports
 import collections
 import itertools
 import os
 import subprocess
 import tempfile
+import uuid
 
 
+# Third-party library imports
 import gmpy2
 import networkx
 
@@ -31,6 +34,58 @@ def equivalence_classes(items, eq_func):
         else:
             classes.append([item])
     return tuple(map(tuple, classes))
+
+
+def pairwise(iterable):
+    a, b = itertools.tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+
+def circular_pairwise(items):
+    return pairwise(items + type(items)([items[0]]))
+
+
+################################################################################
+
+
+def vadd(v, w):
+    assert len(v) == len(w)
+    return tuple(c + d for c, d in zip(v, w))
+
+
+def vsub(v, w):
+    assert len(v) == len(w)
+    return tuple(c - d for c, d in zip(v, w))
+
+
+def svmul(a, v):
+    return tuple(a * c for c in v)
+
+
+def vsdiv(v, a):
+    return tuple(c / a for c in v)
+
+
+def mvmul(mat, vec):
+    m = len(mat)
+    n_set = set(map(len, mat))
+    assert len(n_set) == 1
+    n, = n_set
+    assert len(vec) == n
+    ans = [gmpy2.zero() for _ in range(m)]
+    for i in range(m):
+        for j in range(n):
+            ans[i] += mat[i][j] * vec[j]
+    return tuple(ans)
+
+
+def determinant_3(mat):
+    assert len(mat) == 3
+    assert all(len(row) == 3 for row in mat)
+    return (mat[0][0] * (mat[1][1] * mat[2][2] - mat[2][1] * mat[1][2]) +
+            mat[0][1] * (mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) +
+            mat[0][2] * (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]))
 
 
 ################################################################################
@@ -68,6 +123,26 @@ def squared_difference(v, w):
         for i in range(1, len(v)):
             dist += gmpy2.square(diff[i])
         return dist, diff
+
+
+def squared_norm(v):
+    if len(v) == 0:
+        return gmpy2.zero()
+    else:
+        norm_sq = gmpy2.square(v[0])
+        for i in range(1, len(v)):
+            norm_sq += gmpy2.square(v[i])
+        return norm_sq
+
+
+def norm(v):
+    if len(v) == 0:
+        return gmpy2.zero()
+    else:
+        norm_sq = gmpy2.square(v[0])
+        for i in range(1, len(v)):
+            norm_sq += gmpy2.square(v[i])
+        return gmpy2.sqrt(norm_sq)
 
 
 def rec_norm(v):
@@ -119,6 +194,18 @@ def riesz_energy(points, s):
 ################################################################################
 
 
+def orthonormal_basis(v):
+    if len(v) == 0:
+        return ()
+    else:
+        sign = -1 if v[0] < 0 else +1
+        w = (v[0] + sign * norm(v),) + v[1:]
+        r = 2 / squared_norm(w)
+        return tuple(tuple((i == j) - r * w[i] * w[j]
+                           for j in range(len(v)))
+                     for i in range(len(v)))
+
+
 def centroid(points):
     dim_set = set(map(len, points))
     assert len(dim_set) == 1
@@ -133,25 +220,13 @@ def centroid(points):
     return tuple(cent)
 
 
-def mvmul(mat, vec):
-    m = len(mat)
-    n_set = set(map(len, mat))
-    assert len(n_set) == 1
-    n, = n_set
-    assert len(vec) == n
-    ans = [gmpy2.zero() for _ in range(m)]
-    for i in range(m):
-        for j in range(n):
-            ans[i] += mat[i][j] * vec[j]
-    return tuple(ans)
-
-
-def determinant_3(mat):
-    assert len(mat) == 3
-    assert all(len(row) == 3 for row in mat)
-    return (mat[0][0] * (mat[1][1] * mat[2][2] - mat[2][1] * mat[1][2]) +
-            mat[0][1] * (mat[1][2] * mat[2][0] - mat[1][0] * mat[2][2]) +
-            mat[0][2] * (mat[1][0] * mat[2][1] - mat[1][1] * mat[2][0]))
+def circumcenter(a, b, c):
+    v = vsub(b, a)
+    w = vsub(c, a)
+    d = dot_product(v, w)
+    q = vsub(w, svmul(d / squared_norm(v), v))
+    t = (squared_norm(w) - d) / (2 * dot_product(q, w))
+    return vadd(vadd(a, vsdiv(v, 2)), svmul(t, q))
 
 
 ################################################################################
@@ -579,20 +654,114 @@ def icosahedral_nearest_neighbor_graph(run_record, qconvex_path='qconvex'):
     return nngraph
 
 
-def remove_hexagonal_vertices(graph):
-    hexagonal_vertices = [vertex
-                          for vertex, degree in graph.degree_iter()
-                          if degree == 6]
-    graph.remove_nodes_from(hexagonal_vertices)
+def remove_nodes_of_degree(n, graph):
+    target_nodes = [node
+                    for node, degree in graph.degree_iter()
+                    if degree == n]
+    graph.remove_nodes_from(target_nodes)
     return None
 
 
 def icosahedral_defect_classes(run_record, qconvex_path='qconvex'):
     nngraph = icosahedral_nearest_neighbor_graph(run_record,
                                                  qconvex_path=qconvex_path)
-    remove_hexagonal_vertices(nngraph)
-    node_match = networkx.algorithms.isomorphism\
-                         .categorical_node_match('color', 0)
+    remove_nodes_of_degree(6, nngraph)
+    match_func = networkx.algorithms.isomorphism.categorical_node_match(
+        ['color', 'weight'], [None, None])
+    equiv_func = lambda g, h: networkx.is_isomorphic(g, h,
+                                                     node_match=match_func)
     return equivalence_classes(networkx.connected_component_subgraphs(nngraph),
-                               lambda g, h: networkx.is_isomorphic(
-                                   g, h, node_match=node_match))
+                               equiv_func)
+
+
+def get_defect_id(defect_graph, defect_directory):
+    for defect_entry in os.scandir(defect_directory):
+        if defect_entry.is_file() and defect_entry.name.endswith('.graphml'):
+            known_defect_graph = networkx.read_graphml(defect_entry)
+            match_func = networkx.algorithms.isomorphism.categorical_node_match(
+                ['color', 'weight'], [None, None])
+            if networkx.is_isomorphic(defect_graph, known_defect_graph,
+                                      node_match=match_func):
+                return defect_entry.name[:-8]
+    else:
+        new_defect_id = str(uuid.uuid4())
+        new_defect_file_name = new_defect_id + '.graphml'
+        new_defect_file_path = os.path.join(defect_directory,
+                                            new_defect_file_name)
+        normalized_defect_graph = networkx.convert_node_labels_to_integers(
+            defect_graph, ordering="increasing degree")
+        networkx.write_graphml(normalized_defect_graph, new_defect_file_path,
+                               prettyprint=True)
+        return new_defect_id
+
+
+################################################################################
+
+
+def povray_scalar(c):
+    return '{0:+.16e}'.format(c)
+
+
+def povray_vector(v):
+    assert len(v) == 3
+    return '<' + ', '.join(map(povray_scalar, v)) + '>'
+
+
+def povray_smooth_triangle(a, b, c, color):
+    return "smooth_triangle {{\n    {0},\n    {0},\n    {1},\n    {1},\n"
+           "    {2},\n    {2}\n    pigment {{ color rgb {3} }}\n}}".format(
+        povray_vector(a), povray_vector(b), povray_vector(c),
+        povray_vector(color))
+
+
+def povray_cylinder(a, b, radius, color):
+    return "cylinder {{\n    {0},\n    {1},\n    {2}\n"
+           "    pigment {{ color rgb {3} }}\n}}".format(
+        povray_vector(a), povray_vector(b), povray_scalar(radius),
+        povray_vector(color))
+
+
+def povray_disc(center, radius, color):
+    return "disc {{\n    {0},\n    {0},\n    {1}\n"
+           "    pigment {{ color rgb {2} }}\n}}".format(
+        povray_vector(center), povray_scalar(radius), povray_vector(color))
+
+
+def icosahedral_povray_primitives(run_record):
+    full_points = full_icosahedral_configuration(run_record)[0]
+    nngraph = icosahedral_nearest_neighbor_graph(run_record)
+    povray_primitives = ["#version 3.7;",
+                         "global_settings { assumed_gamma 1 }"]
+    for node_index, adjacency_list in nngraph.adjacency_iter():
+        center = full_points[node_index]
+        povray_primitives.append(
+            povray_disc(center, 0.004, [0, 0, 0]))
+        center_basis = orthonormal_basis(center)
+        def projected_angle(i):
+            displacement = vsub(full_points[i], center)
+            x = dot_product(displacement, center_basis[1])
+            y = dot_product(displacement, center_basis[2])
+            return gmpy2.atan2(y, x)
+        sorted_neighbor_indices = sorted(adjacency_list, key=projected_angle)
+        voronoi_vertices = tuple(
+            normalized(circumcenter(center, full_points[i], full_points[j]))
+            for i, j in circular_pairwise(sorted_neighbor_indices))
+        if len(voronoi_vertices) == 4:
+            color = [1, 1, 0]
+        elif len(voronoi_vertices) == 5:
+            color = [1, 0, 0]
+        elif len(voronoi_vertices) == 6:
+            color = [0, 1, 0]
+        elif len(voronoi_vertices) == 7:
+            color = [0, 0, 1]
+        else:
+            color = [1, 1, 1]
+        for v, w in circular_pairwise(voronoi_vertices):
+            povray_primitives.append(
+                povray_smooth_triangle(center, v, w, color))
+            povray_primitives.append(
+                povray_cylinder(v, w, 0.002, [0, 0, 0]))
+    povray_primitives.append("light_source { <5, 30, -30> color <1, 1, 1> }")
+    povray_primitives.append("camera {\n    up <0, 1, 0>\n    right <1, 0, 0>\n"
+                             "    location <+0.7, +0.7, -2.7>\n"
+                             "    look_at  <-0.7, -0.7, +2.7>\n}")
