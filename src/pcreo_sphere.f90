@@ -85,7 +85,7 @@
 
 
 
-#if defined(PCREO_USE_MKL) .and. defined(PCREO_QUAD_PREC)
+#if defined(PCREO_USE_MKL) && defined(PCREO_QUAD_PREC)
 #error "Intel MKL does not support quad-precision arithmetic."
 #endif
 
@@ -95,30 +95,30 @@
 #define PCREO_BFGS
 #endif
 
-#if defined(PCREO_SINGLE_PREC) .or. defined(PCREO_QUAD_PREC)
+#if defined(PCREO_SINGLE_PREC) || defined(PCREO_QUAD_PREC)
 #undef PCREO_DOUBLE_PREC
 #else
 #define PCREO_DOUBLE_PREC
 #endif
 
 ! Default: 100 particles on the 2-sphere with Coulomb potential
-#if .not. defined(PCREO_PARAM_S)
+#if !defined(PCREO_PARAM_S)
 #define PCREO_PARAM_S 1.0_rk
 #endif
-#if .not. defined(PCREO_PARAM_D)
+#if !defined(PCREO_PARAM_D)
 #define PCREO_PARAM_D 2
 #endif
-#if .not. defined(PCREO_PARAM_N)
+#if !defined(PCREO_PARAM_N)
 #define PCREO_PARAM_N 100
 #endif
 
 ! Default: print optimization status every second
-#if .not. defined(PCREO_PRINT_TIME)
+#if !defined(PCREO_PRINT_TIME)
 #define PCREO_PRINT_TIME 1.0_rk
 #endif
 
 ! Default: save partially-optimized point configuration every 10 seconds
-#if .not. defined(PCREO_SAVE_TIME)
+#if !defined(PCREO_SAVE_TIME)
 #define PCREO_SAVE_TIME 10.0_rk
 #endif
 
@@ -567,9 +567,9 @@ contains
     real(rk) function dot_product_2(v, w) result (dot)
         real(rk), intent(in), dimension(d + 1, num_points) :: v, w
 
-#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
+#if defined(PCREO_USE_MKL) && defined(PCREO_SINGLE_PREC)
         dot = sdot(num_vars, v, 1, w, 1)
-#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
+#elif defined(PCREO_USE_MKL) && defined(PCREO_DOUBLE_PREC)
         dot = ddot(num_vars, v, 1, w, 1)
 #else
         integer :: i, j
@@ -589,9 +589,9 @@ contains
         real(rk), intent(in) :: A(d + 1, num_points, d + 1, num_points)
         real(rk), intent(in) :: b(d + 1, num_points)
 
-#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
+#if defined(PCREO_USE_MKL) && defined(PCREO_SINGLE_PREC)
         call ssymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
-#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
+#elif defined(PCREO_USE_MKL) && defined(PCREO_DOUBLE_PREC)
         call dsymv('U', num_vars, 1.0_rk, A, num_vars, b, 1, 0.0_rk, c, 1)
 #else
         integer :: i, j, k, l
@@ -614,9 +614,9 @@ contains
         real(rk), intent(inout) :: A(d + 1, num_points, d + 1, num_points)
         real(rk), intent(in) :: c, x(d + 1, num_points), y(d + 1, num_points)
 
-#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
+#if defined(PCREO_USE_MKL) && defined(PCREO_SINGLE_PREC)
         call ssyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
-#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
+#elif defined(PCREO_USE_MKL) && defined(PCREO_DOUBLE_PREC)
         call dsyr2('U', num_vars, c, x, 1, y, 1, A, num_vars)
 #else
         integer :: i, j, k, l
@@ -632,9 +632,9 @@ contains
     subroutine identity_matrix_4(A)
         real(rk), intent(out) :: A(d + 1, num_points, d + 1, num_points)
 
-#if defined(PCREO_USE_MKL) .and. defined(PCREO_SINGLE_PREC)
+#if defined(PCREO_USE_MKL) && defined(PCREO_SINGLE_PREC)
         call slaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
-#elif defined(PCREO_USE_MKL) .and. defined(PCREO_DOUBLE_PREC)
+#elif defined(PCREO_USE_MKL) && defined(PCREO_DOUBLE_PREC)
         call dlaset('U', num_vars, num_vars, 0.0_rk, 1.0_rk, A, num_vars)
 #else
         integer :: i, j, k, l
