@@ -37,3 +37,6 @@
 
 # Intel Compiler Optimization Reports
 *.optrpt
+
+# Python module cache files
+__pycache__

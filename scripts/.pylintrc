@@ -1,0 +1,5 @@
+[FORMAT]
+good-names=r,x,y
+
+[TYPECHECK]
+ignored-classes=Graph

@@ -36,35 +36,7 @@ def equivalence_classes(items, eq_func):
     return tuple(map(tuple, classes))
 
 
-def pairwise(iterable):
-    a, b = itertools.tee(iterable)
-    next(b, None)
-    return zip(a, b)
-
-
-def circular_pairwise(items):
-    return pairwise(items + type(items)([items[0]]))
-
-
 ################################################################################
-
-
-def vadd(v, w):
-    assert len(v) == len(w)
-    return tuple(c + d for c, d in zip(v, w))
-
-
-def vsub(v, w):
-    assert len(v) == len(w)
-    return tuple(c - d for c, d in zip(v, w))
-
-
-def svmul(a, v):
-    return tuple(a * c for c in v)
-
-
-def vsdiv(v, a):
-    return tuple(c / a for c in v)
 
 
 def mvmul(mat, vec):
@@ -91,17 +63,6 @@ def determinant_3(mat):
 ################################################################################
 
 
-def dot_product(v, w):
-    assert len(v) == len(w)
-    if len(v) == 0:
-        return gmpy2.zero()
-    else:
-        dot = v[0] * w[0]
-        for i in range(1, len(v)):
-            dot += v[i] * w[i]
-        return dot
-
-
 def squared_distance(v, w):
     assert len(v) == len(w)
     if len(v) == 0:
@@ -123,41 +84,6 @@ def squared_difference(v, w):
         for i in range(1, len(v)):
             dist += gmpy2.square(diff[i])
         return dist, diff
-
-
-def squared_norm(v):
-    if len(v) == 0:
-        return gmpy2.zero()
-    else:
-        norm_sq = gmpy2.square(v[0])
-        for i in range(1, len(v)):
-            norm_sq += gmpy2.square(v[i])
-        return norm_sq
-
-
-def norm(v):
-    if len(v) == 0:
-        return gmpy2.zero()
-    else:
-        norm_sq = gmpy2.square(v[0])
-        for i in range(1, len(v)):
-            norm_sq += gmpy2.square(v[i])
-        return gmpy2.sqrt(norm_sq)
-
-
-def rec_norm(v):
-    if len(v) == 0:
-        return gmpy2.inf()
-    else:
-        norm_sq = gmpy2.square(v[0])
-        for i in range(1, len(v)):
-            norm_sq += gmpy2.square(v[i])
-        return gmpy2.rec_sqrt(norm_sq)
-
-
-def normalized(v):
-    r = rec_norm(v)
-    return tuple(r * c for c in v)
 
 
 ################################################################################
@@ -189,72 +115,6 @@ def riesz_energy(points, s):
             for j in range(i + 1, num_points):
                 energy += squared_distance(points[i], points[j]) ** (-s/2)
     return energy
-
-
-################################################################################
-
-
-def orthonormal_basis(v):
-    if len(v) == 0:
-        return ()
-    else:
-        sign = -1 if v[0] < 0 else +1
-        w = (v[0] + sign * norm(v),) + v[1:]
-        r = 2 / squared_norm(w)
-        return tuple(tuple((i == j) - r * w[i] * w[j]
-                           for j in range(len(v)))
-                     for i in range(len(v)))
-
-
-def centroid(points):
-    dim_set = set(map(len, points))
-    assert len(dim_set) == 1
-    dim, = dim_set
-    cent = [gmpy2.zero() for _ in range(dim)]
-    for point in points:
-        for i in range(dim):
-            cent[i] += point[i]
-    num_points = len(points)
-    for i in range(dim):
-        cent[i] /= num_points
-    return tuple(cent)
-
-
-def circumcenter(a, b, c):
-    v = vsub(b, a)
-    w = vsub(c, a)
-    d = dot_product(v, w)
-    q = vsub(w, svmul(d / squared_norm(v), v))
-    t = (squared_norm(w) - d) / (2 * dot_product(q, w))
-    return vadd(vadd(a, vsdiv(v, 2)), svmul(t, q))
-
-
-################################################################################
-
-
-PCreoRunHeader = collections.namedtuple('PCreoRunHeader',
-                                        ('dim', 's', 'num_points'))
-
-PCreoRunResult = collections.namedtuple('PCreoRunResult',
-                                        ('energy', 'rms_gradient'))
-
-PCreoRunRecord = collections.namedtuple('PCreoRunRecord',
-                                        ('header', 'results', 'points'))
-
-
-def read_pcreo_file(pathlike):
-    with open(pathlike) as pcreo_file:
-        header, result, *points = [
-            line.strip().replace(',', ' ').split()
-            for line in pcreo_file.readlines()]
-    assert len(header) == 3
-    header = PCreoRunHeader(int(header[0]), header[1], int(header[2]))
-    embedded_dim = header.dim + 1
-    result = PCreoRunResult(*tuple(map(gmpy2.mpfr, result)))
-    points = tuple(tuple(map(gmpy2.mpfr, point))
-                   for point in points)
-    assert all(len(point) == embedded_dim for point in points)
-    return PCreoRunRecord(header, result, points)
 
 
 ################################################################################
@@ -607,30 +467,6 @@ def reduced_isometric(p, q, symmetry_group, epsilon=1e-10):
 ################################################################################
 
 
-def convex_hull_facets(points, qconvex_path='qconvex'):
-    dim_set = set(map(len, points))
-    assert len(dim_set) == 1
-    dim, = dim_set
-    num_points = len(points)
-    points_str = '\n'.join(' '.join(map('{0:+.16e}'.format, point))
-                           for point in points)
-    with tempfile.TemporaryFile(mode='w+') as qconvex_input:
-        qconvex_input.write(str(dim) + '\n')
-        qconvex_input.write(str(num_points) + '\n')
-        qconvex_input.write(points_str + '\n')
-        qconvex_input.seek(0)
-        qconvex_info = subprocess.run((qconvex_path, 'Fv'),
-                                      stdin=qconvex_input,
-                                      stdout=subprocess.PIPE)
-    assert qconvex_info.returncode == 0
-    qconvex_lines = qconvex_info.stdout.decode('utf-8')\
-                                       .split(os.linesep)[1:]
-    qconvex_facets = tuple(tuple(map(int, line.split()[1:]))
-                           for line in qconvex_lines
-                           if line)
-    return qconvex_facets
-
-
 def icosahedral_nearest_neighbor_graph(run_record, qconvex_path='qconvex'):
     full_points, (vertex_indices, edge_indices, face_indices) = \
         full_icosahedral_configuration(run_record)
@@ -652,14 +488,6 @@ def icosahedral_nearest_neighbor_graph(run_record, qconvex_path='qconvex'):
     networkx.set_node_attributes(nngraph, 'weight',
                                  dict(nngraph.degree_iter()))
     return nngraph
-
-
-def remove_nodes_of_degree(n, graph):
-    target_nodes = [node
-                    for node, degree in graph.degree_iter()
-                    if degree == n]
-    graph.remove_nodes_from(target_nodes)
-    return None
 
 
 def icosahedral_defect_classes(run_record, qconvex_path='qconvex'):
@@ -696,35 +524,6 @@ def get_defect_id(defect_graph, defect_directory):
 
 
 ################################################################################
-
-
-def povray_scalar(c):
-    return '{0:+.16e}'.format(c)
-
-
-def povray_vector(v):
-    assert len(v) == 3
-    return '<' + ', '.join(map(povray_scalar, v)) + '>'
-
-
-def povray_smooth_triangle(a, b, c, color):
-    return "smooth_triangle {{\n    {0},\n    {0},\n    {1},\n    {1},\n"
-           "    {2},\n    {2}\n    pigment {{ color rgb {3} }}\n}}".format(
-        povray_vector(a), povray_vector(b), povray_vector(c),
-        povray_vector(color))
-
-
-def povray_cylinder(a, b, radius, color):
-    return "cylinder {{\n    {0},\n    {1},\n    {2}\n"
-           "    pigment {{ color rgb {3} }}\n}}".format(
-        povray_vector(a), povray_vector(b), povray_scalar(radius),
-        povray_vector(color))
-
-
-def povray_disc(center, radius, color):
-    return "disc {{\n    {0},\n    {0},\n    {1}\n"
-           "    pigment {{ color rgb {2} }}\n}}".format(
-        povray_vector(center), povray_scalar(radius), povray_vector(color))
 
 
 def icosahedral_povray_primitives(run_record):
