@@ -13,7 +13,6 @@ println()
 using Random
 using UUIDs
 
-using BenchmarkTools
 using DZLinearAlgebra
 using DZOptimization
 using MultiFloats
