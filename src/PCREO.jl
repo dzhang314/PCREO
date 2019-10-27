@@ -20,14 +20,22 @@ using MultiFloats
 set_zero_subnormals(true)
 use_very_sloppy_multifloat_arithmetic()
 
+const TERM = stdout isa Base.TTY
+
 function rmk(args...)::Nothing
-    print(stdout, "\r", args..., "\33[K")
-    flush(stdout)
+    if TERM
+        print(stdout, "\r", args..., "\33[K")
+        flush(stdout)
+    end
 end
 
 function say(args...)::Nothing
-    println(stdout, "\r", args..., "\33[K")
-    flush(stdout)
+    if TERM
+        println(stdout, "\r", args..., "\33[K")
+        flush(stdout)
+    else
+        println(stdout, args...)
+    end
 end
 
 ################################################################################
@@ -102,7 +110,6 @@ end
 
 function say_table_row(opt)
     say(opt.current_iteration[1], " | ", opt.current_objective[1])
-    say()
 end
 
 function run!(opt::ConstrainedLBFGSOptimizer{S1,S2,S3,T,N}
@@ -131,6 +138,8 @@ end
 
 function optimize(::Type{T}, initial_points::Matrix{U},
                   m::Int) where {T<:Real,U<:Real}
+    say("Optimizing ", size(initial_points),
+        " points with ", precision(T), "-bit precision")
     opt = riesz_lbfgs_optimizer(T.(initial_points), m)
     run!(opt)
     return opt.current_point
@@ -150,6 +159,8 @@ function main(m::Int, dim::Int, num_points::Int)
             end
         end
     end
+    say("Saved results to file.")
+    say()
 end
 
 while true
