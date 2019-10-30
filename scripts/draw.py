@@ -19,29 +19,18 @@ from mpfr_vector import MPFRVector
 POVRAY_PATH = 'povray'
 QCONVEX_PATH = 'qconvex'
 
-PCreoRunHeader = collections.namedtuple('PCreoRunHeader',
-                                        ('dim', 's', 'num_points'))
-
-PCreoRunResult = collections.namedtuple('PCreoRunResult',
-                                        ('energy', 'rms_gradient'))
-
 PCreoRunRecord = collections.namedtuple('PCreoRunRecord',
-                                        ('header', 'results', 'points'))
+                                        ('points',))
 
+import sys
 
 def read_pcreo_file(pathlike):
     with open(pathlike) as pcreo_file:
-        header, result, *points = [
-            line.strip().replace(',', ' ').split()
-            for line in pcreo_file.readlines()]
-    assert len(header) == 3
-    header = PCreoRunHeader(int(header[0]), header[1], int(header[2]))
-    embedded_dim = header.dim + 1
-    result = PCreoRunResult(*tuple(map(gmpy2.mpfr, result)))
-    points = tuple(MPFRVector(map(gmpy2.mpfr, point))
-                   for point in points)
-    assert all(len(point) == embedded_dim for point in points)
-    return PCreoRunRecord(header, result, points)
+        lines = [line.strip() for line in pcreo_file]
+    assert len(lines) % 3 == 0
+    points = tuple(MPFRVector(lines[i] for i in range(3*j, 3*j+3))
+                   for j in range(len(lines) // 3))
+    return PCreoRunRecord(points)
 
 
 def convex_hull_facets(points):
@@ -247,6 +236,7 @@ def main():
             print("Successfully read PCreo output file:", dir_entry.name)
         except:
             print("File", dir_entry.name, "is not a PCreo output file.")
+            sys.exit(0)
             continue
         print(len(defect_classes(run_record)))
         povray_draw(run_record, 800, dir_entry.name)
