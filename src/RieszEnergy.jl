@@ -1,6 +1,7 @@
 module RieszEnergy
 
-export riesz_energy, constrain_gradient!, riesz_gradient!, riesz_gradient
+export riesz_energy, constrain_gradient!, riesz_gradient!, riesz_gradient,
+    unconstrained_riesz_gradient!, unconstrained_riesz_gradient
 
 using DZLinearAlgebra: unsafe_sqrt
 
@@ -35,8 +36,8 @@ function constrain_gradient!(grad::AbstractMatrix{T},
     return grad
 end
 
-function riesz_gradient!(grad::AbstractMatrix{T},
-                         points::AbstractMatrix{T}) where {T<:Real}
+function unconstrained_riesz_gradient!(
+        grad::AbstractMatrix{T}, points::AbstractMatrix{T}) where {T<:Real}
     dim, num_points = size(points)
     @inbounds for j = 1 : num_points
         @simd ivdep for k = 1 : dim
@@ -56,7 +57,19 @@ function riesz_gradient!(grad::AbstractMatrix{T},
             end
         end
     end
+    return grad
+end
+
+function riesz_gradient!(grad::AbstractMatrix{T},
+                         points::AbstractMatrix{T}) where {T<:Real}
+    unconstrained_riesz_gradient!(grad, points)
     constrain_gradient!(grad, points)
+    return grad
+end
+
+function unconstrained_riesz_gradient(points::AbstractMatrix{T}) where {T<:Real}
+    grad = similar(points)
+    unconstrained_riesz_gradient!(grad, points)
     return grad
 end
 
