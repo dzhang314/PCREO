@@ -63,6 +63,7 @@ end
 
 function unconstrained_riesz_hessian!(
         hess::AbstractArray{T,4}, points::AbstractMatrix{T}) where {T<:Real}
+    dim, num_points = size(points)
     @inbounds for k = 1 : num_points
         for s = 1 : num_points
             if s == k
@@ -78,7 +79,7 @@ function unconstrained_riesz_hessian!(
                             temp = points[d,k] - points[d,j]
                             dist_sq += temp * temp
                         end
-                        dist = sqrt(dist_sq)
+                        dist = unsafe_sqrt(dist_sq)
                         dist_cb = dist * dist_sq
                         for l = 1 : dim
                             @simd ivdep for t = 1 : dim
@@ -97,7 +98,7 @@ function unconstrained_riesz_hessian!(
                     temp = points[d,k] - points[d,s]
                     dist_sq += temp * temp
                 end
-                dist = sqrt(dist_sq)
+                dist = unsafe_sqrt(dist_sq)
                 dist_cb = dist * dist_sq
                 for l = 1 : dim
                     @simd ivdep for t = 1 : dim
