@@ -2,7 +2,8 @@ module RieszEnergy
 
 export riesz_energy, constrain_gradient!, riesz_gradient!, riesz_gradient,
     unconstrained_riesz_gradient!, unconstrained_riesz_gradient,
-    unconstrained_riesz_hessian!, unconstrained_riesz_hessian
+    unconstrained_riesz_hessian!, unconstrained_riesz_hessian,
+    constrain_hessian!, riesz_hessian
 
 using DZLinearAlgebra: unsafe_sqrt
 
@@ -115,6 +116,55 @@ function unconstrained_riesz_hessian!(
     return hess
 end
 
+function constrain_hessian!(
+        hess::AbstractArray{T,4}, points::AbstractMatrix{T},
+        unconstrained_grad::AbstractMatrix{T}) where {T<:Real}
+    dim, num_points = size(points)
+    @inbounds for s = 1 : num_points
+        for t = 1 : num_points
+            for i = 1 : dim
+                temp = zero(T)
+                @simd ivdep for j = 1 : dim
+                    temp += hess[j,s,i,t] * points[j,s]
+                end
+                @simd ivdep for j = 1 : dim
+                    hess[j,s,i,t] -= temp * points[j,s]
+                end
+            end
+        end
+        for t = 1 : num_points
+            for i = 1 : dim
+                temp = zero(T)
+                @simd ivdep for j = 1 : dim
+                    temp += hess[i,t,j,s] * points[j,s]
+                end
+                @simd ivdep for j = 1 : dim
+                    hess[i,t,j,s] -= temp * points[j,s]
+                end
+            end
+        end
+    end
+    @inbounds for s = 1 : num_points
+        for i = 1 : dim
+            gis = unconstrained_grad[i,s]
+            pis = points[i,s]
+            for j = 1 : dim
+                pjs = points[j,s]
+                for k = 1 : dim
+                    pks = points[k,s]
+                    temp = pis * pjs * pks
+                    temp = (temp + temp + temp)
+                    if j == k; temp -= pis; end
+                    if i == k; temp -= pjs; end
+                    if i == j; temp -= pks; end
+                    hess[k,s,j,s] += gis * temp
+                end
+            end
+        end
+    end
+    return hess
+end
+
 function riesz_gradient!(grad::AbstractMatrix{T},
                          points::AbstractMatrix{T}) where {T<:Real}
     unconstrained_riesz_gradient!(grad, points)
@@ -139,6 +189,14 @@ function riesz_gradient(points::AbstractMatrix{T}) where {T<:Real}
     grad = similar(points)
     riesz_gradient!(grad, points)
     return grad
+end
+
+function riesz_hessian(points::AbstractMatrix{T}) where {T<:Real}
+    dim, num_points = size(points)
+    hess = Array{T,4}(undef, dim, num_points, dim, num_points)
+    unconstrained_riesz_hessian!(hess, points)
+    constrain_hessian!(hess, points, unconstrained_riesz_gradient(points))
+    return hess
 end
 
 end # module RieszEnergy
