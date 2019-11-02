@@ -1,7 +1,8 @@
 module RieszEnergy
 
 export riesz_energy, constrain_gradient!, riesz_gradient!, riesz_gradient,
-    unconstrained_riesz_gradient!, unconstrained_riesz_gradient
+    unconstrained_riesz_gradient!, unconstrained_riesz_gradient,
+    unconstrained_riesz_hessian!, unconstrained_riesz_hessian
 
 using DZLinearAlgebra: unsafe_sqrt
 
@@ -60,6 +61,59 @@ function unconstrained_riesz_gradient!(
     return grad
 end
 
+function unconstrained_riesz_hessian!(
+        hess::AbstractArray{T,4}, points::AbstractMatrix{T}) where {T<:Real}
+    @inbounds for k = 1 : num_points
+        for s = 1 : num_points
+            if s == k
+                for l = 1 : dim
+                    @simd ivdep for t = 1 : dim
+                        hess[t,s,l,k] = zero(T)
+                    end
+                end
+                for j = 1 : num_points
+                    if j != k
+                        dist_sq = zero(T)
+                        @simd ivdep for d = 1 : dim
+                            temp = points[d,k] - points[d,j]
+                            dist_sq += temp * temp
+                        end
+                        dist = sqrt(dist_sq)
+                        dist_cb = dist * dist_sq
+                        for l = 1 : dim
+                            @simd ivdep for t = 1 : dim
+                                plkj = points[l,k] - points[l,j]
+                                ptkj = points[t,k] - points[t,j]
+                                temp = (plkj * ptkj) / (dist_sq * dist_cb)
+                                hess[t,s,l,k] += (temp + temp + temp)
+                            end
+                            hess[l,s,l,k] -= inv(dist_cb)
+                        end
+                    end
+                end
+            else
+                dist_sq = zero(T)
+                @simd ivdep for d = 1 : dim
+                    temp = points[d,k] - points[d,s]
+                    dist_sq += temp * temp
+                end
+                dist = sqrt(dist_sq)
+                dist_cb = dist * dist_sq
+                for l = 1 : dim
+                    @simd ivdep for t = 1 : dim
+                        plks = points[l,k] - points[l,s]
+                        ptsk = points[t,s] - points[t,k]
+                        temp = (plks * ptsk) / (dist_sq * dist_cb)
+                        hess[t,s,l,k] = (temp + temp + temp)
+                    end
+                    hess[l,s,l,k] += inv(dist_cb)
+                end
+            end
+        end
+    end
+    return hess
+end
+
 function riesz_gradient!(grad::AbstractMatrix{T},
                          points::AbstractMatrix{T}) where {T<:Real}
     unconstrained_riesz_gradient!(grad, points)
@@ -71,6 +125,13 @@ function unconstrained_riesz_gradient(points::AbstractMatrix{T}) where {T<:Real}
     grad = similar(points)
     unconstrained_riesz_gradient!(grad, points)
     return grad
+end
+
+function unconstrained_riesz_hessian(points::AbstractMatrix{T}) where {T<:Real}
+    dim, num_points = size(points)
+    hess = Array{T,4}(undef, dim, num_points, dim, num_points)
+    unconstrained_riesz_hessian!(hess, points)
+    return hess
 end
 
 function riesz_gradient(points::AbstractMatrix{T}) where {T<:Real}
