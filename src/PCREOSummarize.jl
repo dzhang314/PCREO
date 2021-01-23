@@ -37,6 +37,7 @@ end
 
 
 function main()
+    # verify_unique_energies()
     summary_data = Dict{Int,Vector{Tuple{Float64,String,Int}}}()
     @showprogress for dirname in readdir(PCREO_DATABASE_DIRECTORY)
         dirpath = joinpath(PCREO_DATABASE_DIRECTORY, dirname)
@@ -53,8 +54,8 @@ function main()
     for k in sort!(collect(keys(summary_data)))
         v = summary_data[k]
         sort!(v)
+        total_count = sum(n for (_, _, n) in v)
         if length(v) > 1
-            total_count = sum(n for (_, _, n) in v)
             total_energy = sum(e * n for (e, _, n) in v)
             mean_energy = total_energy / total_count
             total_deviation = sum((e - mean_energy)^2 * n for (e, _, n) in v)
@@ -64,7 +65,7 @@ function main()
             stdev = 1.0
         end
         println("\n", k, " =======================================",
-                "=============================")
+                "============================= ", total_count)
         for (e, s, n) in v
             z = (e - mean_energy) / stdev
             @printf("% 8.4f    %s    %4d\n", z, s, n)
