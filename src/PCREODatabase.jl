@@ -55,27 +55,33 @@ end
 
 function main()
 
+    min_n = parse(Int, ARGS[1])
+    max_n = parse(Int, ARGS[2])
+
     while true
         remaining = filter(startswith("PCREO"), readdir(PCREO_OUTPUT_DIRECTORY))
         if !isempty(remaining)
             name = rand(remaining)
-            print(length(remaining), '\t', name, " => ")
-            flush(stdout)
-            try
-                found = add_to_database(name)
-                if occursin(found, name)
-                    println("new")
-                else
-                    println(found)
+            num_particles = parse(Int, name[10:13])
+            if min_n <= num_particles <= max_n
+                print(length(remaining), '\t', name, " => ")
+                flush(stdout)
+                try
+                    found = add_to_database(name)
+                    if occursin(found, name)
+                        println("new")
+                    else
+                        println(found)
+                    end
+                catch e
+                    if e isa AssertionError
+                        println("ERROR: ", e)
+                    else
+                        rethrow(e)
+                    end
                 end
-            catch e
-                if e isa AssertionError
-                    println("ERROR: ", e)
-                else
-                    rethrow(e)
-                end
+                flush(stdout)
             end
-            flush(stdout)
         end
     end
 
