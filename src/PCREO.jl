@@ -15,7 +15,7 @@ export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
     spherical_riesz_hessian, PCREORecord,
     distances, labeled_distances, bucket_by_first, middle,
     positive_transformation_matrix, negative_transformation_matrix,
-    matching_distance
+    candidate_isometries, matching_distance
 
 
 ########################################################### FILE NAMES AND PATHS
@@ -177,6 +177,41 @@ positive_transformation_matrix(u1, v1, u2, v2) =
 
 negative_transformation_matrix(u1, v1, u2, v2) =
     hcat(u2, v2, cross(u2, v2)) * inv(hcat(u1, v1, cross(v1, u1)))
+
+
+function push_isometry!(isometries, matrix)
+    @assert maximum(abs.(matrix' * matrix - one(matrix))) < 1.0e-12
+    push!(isometries, matrix)
+end
+
+
+function candidate_isometries(a_points, b_points)
+    result = Matrix{Float64}[]
+    a_buckets = bucket_by_first(sort!(labeled_distances(a_points)), 1.0e-10)
+    b_buckets = bucket_by_first(sort!(labeled_distances(b_points)), 1.0e-10)
+    a_spread = maximum(first.(last.(a_buckets)) - first.(first.(a_buckets)))
+    b_spread = maximum(first.(last.(b_buckets)) - first.(first.(b_buckets)))
+    @assert 0.0 <= a_spread < 1.0e-10
+    @assert 0.0 <= b_spread < 1.0e-10
+    if length.(a_buckets) == length.(b_buckets)
+        # TODO: Verify that buckets are close to each other.
+        bucket_index = minimum([(length(bucket), index)
+                                for (index, bucket) in enumerate(a_buckets)
+                                if 0.25 < middle(bucket)[1] < 1.75])[2]
+        _, i, j = middle(a_buckets[bucket_index])
+        for (_, k, l) in b_buckets[bucket_index]
+            push_isometry!(result, positive_transformation_matrix(
+                a_points[:,i], a_points[:,j], b_points[:,k], b_points[:,l]))
+            push_isometry!(result, negative_transformation_matrix(
+                a_points[:,i], a_points[:,j], b_points[:,k], b_points[:,l]))
+            push_isometry!(result, positive_transformation_matrix(
+                a_points[:,i], a_points[:,j], b_points[:,l], b_points[:,k]))
+            push_isometry!(result, negative_transformation_matrix(
+                a_points[:,i], a_points[:,j], b_points[:,l], b_points[:,k]))
+        end
+    end
+    return result
+end
 
 
 function matching_distance(points::Matrix{T}, tree::KDTree) where {T}

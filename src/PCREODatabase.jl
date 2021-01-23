@@ -1,6 +1,7 @@
-using DZOptimization
-using LinearAlgebra: cross, det
-using NearestNeighbors
+using NearestNeighbors: KDTree
+
+push!(LOAD_PATH, @__DIR__)
+using PCREO
 
 
 function isometric(a::PCREORecord, b::PCREORecord)
@@ -10,45 +11,20 @@ function isometric(a::PCREORecord, b::PCREORecord)
     if !isapprox(a.energy, b.energy; rtol=1.0e-14)
         return false
     end
-    if sort!(length.(a.facets)) != sort!(length.(b.facets))
-        return false
-    end
-    a_buckets = bucket_by_first(sort!(labeled_distances(a.points)), 1.0e-14)
-    b_buckets = bucket_by_first(sort!(labeled_distances(b.points)), 1.0e-14)
-    if length.(a_buckets) != length.(b_buckets)
-        return false
-    end
-    if !all(isapprox.(first.(middle.(a_buckets)),
-                      first.(middle.(b_buckets)); rtol=1.0e-14))
-        return false
-    end
+    identical_facets = (sort!(length.(a.facets)) == sort!(length.(b.facets)))
+    # if !all(isapprox.(first.(middle.(a_buckets)),
+    #                   first.(middle.(b_buckets)); rtol=1.0e-14))
+    #     return false
+    # end
     b_tree = KDTree(b.points)
-    _, i, j = middle(a_buckets[1])
-    for (_, k, l) in b_buckets[1]
-        mat = positive_transformation_matrix(
-            a.points[:,i], a.points[:,j], b.points[:,k], b.points[:,l])
-        @assert maximum(abs.(mat' * mat - one(mat))) < 1.0e-14
-        if isometric(mat * a.points, b_tree)
-            return true
+    dist = minimum(matching_distance(mat * a.points, b_tree)
+                   for mat in candidate_isometries(a.points, b.points))
+    if dist < 1.0e-10
+        if !identical_facets
+            println("WARNING: Found isometric point configurations" *
+                    " with different facets.")
         end
-        mat = negative_transformation_matrix(
-            a.points[:,i], a.points[:,j], b.points[:,k], b.points[:,l])
-        @assert maximum(abs.(mat' * mat - one(mat))) < 1.0e-14
-        if isometric(mat * a.points, b_tree)
-            return true
-        end
-        mat = positive_transformation_matrix(
-            a.points[:,i], a.points[:,j], b.points[:,l], b.points[:,k])
-        @assert maximum(abs.(mat' * mat - one(mat))) < 1.0e-14
-        if isometric(mat * a.points, b_tree)
-            return true
-        end
-        mat = negative_transformation_matrix(
-            a.points[:,i], a.points[:,j], b.points[:,l], b.points[:,k])
-        @assert maximum(abs.(mat' * mat - one(mat))) < 1.0e-14
-        if isometric(mat * a.points, b_tree)
-            return true
-        end
+        return true
     end
     return false
 end
@@ -56,21 +32,21 @@ end
 
 function add_to_database(dataname)
     prefix = dataname[1:13]
-    datapath = joinpath(PCREO_DIRECTORY, dataname)
-    data = read_pcreo_file(datapath)
-    for dirname in filter(startswith(prefix), readdir(DATABASE_DIRECTORY))
-        dirpath = joinpath(DATABASE_DIRECTORY, dirname)
+    datapath = joinpath(PCREO_OUTPUT_DIRECTORY, dataname)
+    data = PCREORecord(datapath)
+    for dirname in filter(startswith(prefix), readdir(PCREO_DATABASE_DIRECTORY))
+        dirpath = joinpath(PCREO_DATABASE_DIRECTORY, dirname)
         @assert isdir(dirpath)
         reppath = joinpath(dirpath, dirname * ".csv")
         @assert isfile(reppath)
-        representative = read_pcreo_file(reppath)
+        representative = PCREORecord(reppath)
         if isometric(data, representative)
             mv(datapath, joinpath(dirpath, dataname))
             return dirname
         end
     end
     newdirname = dataname[1:end-4]
-    newdirpath = joinpath(DATABASE_DIRECTORY, newdirname)
+    newdirpath = joinpath(PCREO_DATABASE_DIRECTORY, newdirname)
     mkdir(newdirpath)
     mv(datapath, joinpath(newdirpath, dataname))
     return newdirname
@@ -79,17 +55,8 @@ end
 
 function main()
 
-    println("Checking validity of database...")
-    for dirname in readdir(DATABASE_DIRECTORY)
-        dirpath = joinpath(DATABASE_DIRECTORY, dirname)
-        @assert isdir(dirpath)
-        reppath = joinpath(dirpath, dirname * ".csv")
-        @assert isfile(reppath)
-        representative = read_pcreo_file(reppath)
-    end
-
     while true
-        remaining = filter(startswith("PCREO"), readdir(PCREO_DIRECTORY))
+        remaining = filter(startswith("PCREO"), readdir(PCREO_OUTPUT_DIRECTORY))
         if !isempty(remaining)
             name = rand(remaining)
             print(length(remaining), '\t', name, " => ")
