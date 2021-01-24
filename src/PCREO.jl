@@ -10,6 +10,7 @@ using DZOptimization.ExampleFunctions:
 
 export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
     PCREO_OUTPUT_DIRECTORY, PCREO_DATABASE_DIRECTORY,
+    PCREO_GRAPH_DIRECTORY, PCREO_FACET_ERROR_DIRECTORY,
     riesz_energy, constrain_sphere!,
     spherical_riesz_gradient!, spherical_riesz_gradient,
     spherical_riesz_hessian, PCREORecord,
@@ -32,6 +33,10 @@ const PCREO_FILENAME_REGEX = Regex(
 const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREO"
 
 const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
+
+const PCREO_GRAPH_DIRECTORY = "D:\\Data\\PCREOGraphs"
+
+const PCREO_FACET_ERROR_DIRECTORY = "D:\\Data\\PCREOFacetErrors"
 
 
 ######################################################## RIESZ ENERGY ON SPHERES
