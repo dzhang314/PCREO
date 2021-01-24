@@ -3,7 +3,7 @@ module PCREO
 using LinearAlgebra: cross
 using NearestNeighbors: KDTree, knn
 
-using DZOptimization: half, normalize_columns!, unsafe_sqrt
+using DZOptimization: half, norm, normalize_columns!, unsafe_sqrt
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, riesz_hessian!,
     constrain_riesz_gradient_sphere!, constrain_riesz_hessian_sphere!
@@ -16,7 +16,10 @@ export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
     spherical_riesz_hessian, PCREORecord,
     distances, labeled_distances, bucket_by_first, middle,
     positive_transformation_matrix, negative_transformation_matrix,
-    candidate_isometries, matching_distance
+    candidate_isometries, matching_distance,
+    dict_push!, dict_incr!,
+    adjacency_structure, incidence_degrees, connected_components,
+    defect_graph, defect_classes, automorphism_group
 
 
 ########################################################### FILE NAMES AND PATHS
@@ -173,7 +176,7 @@ end
 middle(x::Vector) = x[(length(x) + 1) >> 1]
 
 
-############################################################### ISOMETRY TESTING
+####################################################################### ISOMETRY
 
 
 positive_transformation_matrix(u1, v1, u2, v2) =
@@ -184,13 +187,15 @@ negative_transformation_matrix(u1, v1, u2, v2) =
     hcat(u2, v2, cross(u2, v2)) * inv(hcat(u1, v1, cross(v1, u1)))
 
 
-function push_isometry!(isometries, matrix)
+function push_isometry!(isometries::Vector{Matrix{Float64}},
+                        matrix::Matrix{Float64})
     @assert maximum(abs.(matrix' * matrix - one(matrix))) < 1.0e-12
     push!(isometries, matrix)
 end
 
 
-function candidate_isometries(a_points, b_points)
+function candidate_isometries(a_points::Matrix{Float64},
+                              b_points::Matrix{Float64})
     result = Matrix{Float64}[]
     a_buckets = bucket_by_first(sort!(labeled_distances(a_points)), 1.0e-10)
     b_buckets = bucket_by_first(sort!(labeled_distances(b_points)), 1.0e-10)
@@ -228,6 +233,163 @@ function matching_distance(points::Matrix{T}, tree::KDTree) where {T}
     else
         return typemax(T)
     end
+end
+
+
+###################################################################### ADJACENCY
+
+
+function dict_push!(d::Dict{K,Vector{T}}, k::K, v::T) where {K,T}
+    if haskey(d, k)
+        push!(d[k], v)
+    else
+        d[k] = [v]
+    end
+    return d[k]
+end
+
+
+function dict_incr!(d::Dict{K,Int}, k::K) where {K}
+    if haskey(d, k)
+        d[k] += 1
+    else
+        d[k] = 1
+    end
+    return d[k]
+end
+
+
+function adjacency_structure(facets::Vector{Vector{Int}})
+    pair_dict = Dict{Tuple{Int,Int},Vector{Int}}()
+    for (k, facet) in enumerate(facets)
+        n = length(facet)
+        for i = 1 : n-1
+            for j = i+1 : n
+                dict_push!(pair_dict, minmax(facet[i], facet[j]), k)
+            end
+        end
+    end
+    adjacent_vertices = Vector{Tuple{Int,Int}}()
+    adjacent_facets = Vector{Tuple{Int,Int}}()
+    for (vertex_pair, incident_facets) in pair_dict
+        if length(incident_facets) >= 2
+            @assert length(incident_facets) == 2
+            push!(adjacent_vertices, vertex_pair)
+            push!(adjacent_facets, minmax(incident_facets...))
+        end
+    end
+    return (adjacent_vertices, adjacent_facets)
+end
+
+
+function incidence_degrees(facets::Vector{Vector{Int}})
+    degrees = Dict{Int,Int}()
+    for facet in facets
+        for vertex in facet
+            dict_incr!(degrees, vertex)
+        end
+    end
+    return degrees
+end
+
+
+function connected_components(adjacency_lists::Dict{Int,Vector{Int}})
+    visited = Dict(v => false for (v, l) in adjacency_lists)
+    components = Vector{Int}[]
+    for (v, l) in adjacency_lists
+        if !visited[v]
+            visited[v] = true
+            current_component = [v]
+            to_visit = append!([], l)
+            while !isempty(to_visit)
+                w = pop!(to_visit)
+                if !visited[w]
+                    visited[w] = true
+                    push!(current_component, w)
+                    append!(to_visit, adjacency_lists[w])
+                end
+            end
+            push!(components, current_component)
+        end
+    end
+    @assert allunique(vcat(components...))
+    return components
+end
+
+
+############################################################ TOPOLOGICAL DEFECTS
+
+
+function defect_graph(facets::Vector{Vector{Int}})
+    adjacent_vertices, _ = adjacency_structure(facets)
+    adjacency_lists = Dict{Int,Vector{Int}}()
+    for (v, w) in adjacent_vertices
+        dict_push!(adjacency_lists, v, w)
+        dict_push!(adjacency_lists, w, v)
+    end
+    degrees = Dict(v => length(l) for (v, l) in adjacency_lists)
+    @assert degrees == incidence_degrees(facets)
+    hexagonal_vertices = [v for (v, d) in degrees if d == 6]
+    for k in hexagonal_vertices
+        delete!(adjacency_lists, k)
+        delete!(degrees, k)
+    end
+    for (v, l) in adjacency_lists
+        deleteat!(adjacency_lists[v],
+            [i for (i, w) in enumerate(l)
+             if w in hexagonal_vertices])
+    end
+    return (adjacency_lists, degrees)
+end
+
+
+function defect_classes(facets::Vector{Vector{Int}})
+    adjacency_lists, defect_degrees = defect_graph(facets)
+    defect_components = connected_components(adjacency_lists)
+    defect_counts = Dict{Vector{Tuple{Int,Tuple{Int,Int}}},Int}()
+    for component in defect_components
+        shape_counts = Dict{Tuple{Int,Int},Int}()
+        for v in component
+            dict_incr!(shape_counts,
+                (length(adjacency_lists[v]), defect_degrees[v]))
+        end
+        shape_table = [(num, shape) for (shape, num) in shape_counts]
+        sort!(shape_table; rev=true)
+        dict_incr!(defect_counts, shape_table)
+    end
+    defect_table = [(num, defect) for (defect, num) in defect_counts]
+    sort!(defect_table; rev=true)
+    return defect_table
+end
+
+
+####################################################################### SYMMETRY
+
+
+function automorphism_group(points::Matrix{Float64})
+    tree = KDTree(points)
+    automorphisms = Matrix{Float64}[]
+    for mat in candidate_isometries(points, points)
+        if matching_distance(mat * points, tree) < 1.0e-12
+            push!(automorphisms, mat)
+        end
+    end
+    n = length(automorphisms)
+    multiplication_table = Matrix{Int}(undef, n, n)
+    for i = 1 : n
+        for j = 1 : n
+            dist, k = minimum([
+                (norm(mat - automorphisms[i] * automorphisms[j]), index)
+                for (index, mat) in enumerate(automorphisms)])
+            @assert dist < 1.0e-12
+            multiplication_table[i, j] = k
+        end
+    end
+    for i = 1 : n
+        @assert allunique(multiplication_table[:, i])
+        @assert allunique(multiplication_table[i, :])
+    end
+    return (automorphisms, multiplication_table)
 end
 
 
