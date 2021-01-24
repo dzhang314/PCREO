@@ -59,7 +59,7 @@ function main()
         end
         energy_buckets = bucket_by_first(
             sort!([(database[dirname].energy, dirname)
-                for dirname in dirnames]),
+                   for dirname in dirnames]),
             1.0e-10)
         for bucket in energy_buckets
             if length(bucket) > 1
