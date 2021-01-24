@@ -40,32 +40,34 @@ $ImagePath = "D:\\Data\\PCREOImages";
 LaunchKernels[16];
 
 Do[
-	Print["Loading data for ", FileBaseName[dir], "..."];
-	With[{selected = First@MinimalBy[
-		ImportPCREO /@ FileNames[All, dir],
-		Length[#[[3]]]&]
-	},
-	Print["Rendering image for ", FileBaseName[dir], "..."];
-	With[{primitives = PlotPCREOPrimitives[selected]},
-	With[{frames = Table[
-		Graphics3D[primitives,
-			Boxed -> False,
-			ViewVector -> {
-				100 * Normalize[{2*Cos[t], 2*Sin[t], Cos[2*t]}],
-				{0, 0, 0}
-			},
-			ViewVertical -> {0, 0, 1},
-			ViewAngle -> 0.021],
-		{t, N[2*Pi * Range[0, 199] / 200]}
-	]},
-	Export[
-		FileNameJoin[{$ImagePath, FileBaseName[dir] <> ".gif"}],
-		ParallelMap[
-			Rasterize[#, Background -> None, ImageResolution -> 50]&,
-			frames, Method -> "FinestGrained"
-		],
-		"DisplayDurations" -> 1/30,
-		"AnimationRepetitions" -> Infinity
-	]]]],
+	If[!FileExistsQ[FileNameJoin[{$ImagePath, FileBaseName[dir] <> ".gif"}]],
+		Print["Loading data for ", FileBaseName[dir], "..."];
+		With[{selected = First@MinimalBy[
+			ImportPCREO /@ FileNames[All, dir],
+			Length[#[[3]]]&
+		]},
+		Print["Rendering image for ", FileBaseName[dir], "..."];
+		With[{primitives = PlotPCREOPrimitives[selected]},
+		With[{frames = Table[
+			Graphics3D[primitives,
+				Boxed -> False,
+				ViewVector -> {
+					100 * Normalize[{2*Cos[t], 2*Sin[t], Cos[2*t]}],
+					{0, 0, 0}
+				},
+				ViewVertical -> {0, 0, 1},
+				ViewAngle -> 0.021],
+			{t, N[2*Pi * Range[0, 199] / 200]}
+		]},
+		Export[
+			FileNameJoin[{$ImagePath, FileBaseName[dir] <> ".gif"}],
+			ParallelMap[
+				Rasterize[#, Background -> None, ImageResolution -> 50]&,
+				frames, Method -> "FinestGrained"
+			],
+			"DisplayDurations" -> 1/30,
+			"AnimationRepetitions" -> Infinity
+		]]]]
+	],
 	{dir, FileNames[All, $DatabasePath]}
 ];
