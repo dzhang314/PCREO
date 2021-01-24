@@ -22,13 +22,16 @@ $PCREOGraphDirectory = "D:\\Data\\PCREOGraphs";
 
 LaunchKernels[16];
 Do[
-	Print["Calculating graphs for ", FileBaseName[dir], "..."];
-	With[{g6strings = ParallelMap[G6String, FileNames[All, dir],
-			Method -> "FinestGrained"]},
-		Export[
-			FileNameJoin[{$PCREOGraphDirectory, FileBaseName[dir] <> ".g6"}],
-			StringJoin @@ Union[g6strings], "Text"
-		]
-	],
+	With[{outputFile = FileNameJoin[
+		{$PCREOGraphDirectory, FileBaseName[dir] <> ".g6"}
+	]},
+	If[!FileExistsQ[outputFile],
+		Print["Calculating graphs for ", FileBaseName[dir], "..."];
+		With[{g6strings = ParallelMap[
+			G6String, FileNames[All, dir],
+			Method -> "FinestGrained"
+		]},
+		Export[outputFile, StringJoin @@ Union[g6strings], "Text"]
+	]]],
 	{dir, FileNames[All, $PCREODatabaseDirectory]}
 ];
