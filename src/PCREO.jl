@@ -468,6 +468,21 @@ function order(x::Int, multiplication_table::Matrix{Int}, e::Int)
 end
 
 
+function is_pure_reflection(mat::Matrix{Float64})
+    @assert size(mat) == (3, 3)
+    return maximum(abs.(svd(mat + one(mat)).S - [2.0, 2.0, 0.0])) < 1.0e-12
+end
+
+
+function count_central_elements(multiplication_table::Matrix{Int})
+    m, n = size(multiplication_table)
+    @assert m == n
+    return count(all(
+        @inbounds multiplication_table[i,j] == multiplication_table[j,i]
+        for j = 1 : n) for i = 1 : n)
+end
+
+
 function point_group(points::Matrix{Float64})
 
     matrices, multiplication_table = automorphism_group(points)
@@ -521,9 +536,10 @@ function point_group(points::Matrix{Float64})
     max_order_elements = [
         matrices[i] for (i, k) in enumerate(order_table)
         if k == max_order]
-
-    is_abelian = (multiplication_table' == multiplication_table)
     is_cyclic = (max_order == n)
+
+    num_central_elements = count_central_elements(multiplication_table)
+    is_abelian = (num_central_elements == n)
 
     if is_cyclic
         @assert is_abelian
@@ -539,17 +555,16 @@ function point_group(points::Matrix{Float64})
             num_pure_refls = sum(is_pure_reflection.(matrices))
             if num_pure_refls == 0
                 return "S_$n"
-            elseif num_pure_refls == 1
+            else
+                @assert num_pure_refls == 1
                 @assert isodd(n >> 1)
                 return "C_$(n >> 1)h"
-            else
-                @assert false
             end
         end
     end
 
     if n == 4
-        # The point group must be the Klein four-group.
+        # A non-cyclic group of order 4 must be the Klein four-group.
         @assert !is_cyclic
         @assert is_abelian
         # The Klein four-group can act on R3 via linear isometries in
@@ -600,7 +615,7 @@ function point_group(points::Matrix{Float64})
         end
     end
 
-    # The only abelian but not cyclic point groups of order > 4 are C_nh
+    # The only non-cylic abelian point groups of order > 4 are C_nh
     # for n even, and D_2h, which "accidentally" happens to be abelian.
     if is_abelian
         @assert iseven(n)
@@ -632,20 +647,35 @@ function point_group(points::Matrix{Float64})
         @assert iseven(n >> 1)
         axes = [rotation_axis(-mat)
                 for mat in max_order_elements]
-        @assert all(abs(abs(a' * b) - 1.0) < 1.0e-12
-                    for a in axes for b in axes)
-        num_pure_normal_refls = count(
-            is_pure_reflection(mat) &&
-            maximum(abs.(mat * axes[1] + axes[1])) < 1.0e-12
-            for mat in matrices)
-        if num_pure_normal_refls == 0
-            return "D_$(n >> 2)d"
+        is_axial = all(abs(abs(a' * b) - 1.0) < 1.0e-12
+                       for a in axes for b in axes)
+        if is_axial
+            num_pure_normal_refls = count(
+                is_pure_reflection(mat) &&
+                maximum(abs.(mat * axes[1] + axes[1])) < 1.0e-12
+                for mat in matrices)
+            if num_pure_normal_refls == 0
+                return "D_$(n >> 2)d"
+            else
+                @assert num_pure_normal_refls == 1
+                @assert isodd(n >> 2)
+                return "D_$(n >> 2)h"
+            end
         else
-            @assert num_pure_normal_refls == 1
-            @assert isodd(n >> 2)
-            return "D_$(n >> 2)h"
+            if n == 120
+                return "I_h"
+            elseif n == 48
+                return "O_h"
+            else
+                @assert n == 24
+                if num_central_elements == 1
+                    return "T_d"
+                else
+                    @assert num_central_elements == 2
+                    return "T_h"
+                end
+            end
         end
-
     end
 
     is_axial = all(abs(abs(a' * b) - 1.0) < 1.0e-12
@@ -676,10 +706,22 @@ function point_group(points::Matrix{Float64})
             return "D_$(n >> 2)h"
         end
     else
-        @assert n in [12, 24, 48, 60, 120]
-        return "?"
+        @assert is_chiral
+        if n == 12
+            return "T"
+        elseif n == 24
+            return "O"
+        else
+            @assert n == 60
+            return "I"
+        end
     end
 end
+
+
+equatorial_points(height, offset, n) = [
+    normalize!(append!([height], reim(cis(2pi * (x + offset) / n))))
+    for x = 1 : n]
 
 
 Cn_point_configuration(n::Int) = hcat(
@@ -733,6 +775,18 @@ Dnd_point_configuration(n::Int) = hcat(
     equatorial_points(0.0, 0.4, n)...,
     equatorial_points(0.0, 0.6, n)...,
     equatorial_points(-0.2, 0.5, n)...)
+
+
+Td_point_configuration() = [
+    +sqrt(2/3) -sqrt(2/3)  0.0        0.0;
+     0.0        0.0       +sqrt(2/3) -sqrt(2/3);
+    -sqrt(1/3) -sqrt(1/3) +sqrt(1/3) +sqrt(1/3)]
+
+
+Oh_point_configuration() = [
+    +1.0 -1.0  0.0  0.0  0.0  0.0;
+     0.0  0.0 +1.0 -1.0  0.0  0.0;
+     0.0  0.0  0.0  0.0 +1.0 -1.0]
 
 
 function test_point_group()
