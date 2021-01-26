@@ -19,7 +19,8 @@ export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
     candidate_isometries, matching_distance,
     dict_push!, dict_incr!,
     adjacency_structure, incidence_degrees, connected_components,
-    defect_graph, defect_classes, automorphism_group, point_group
+    defect_graph, defect_classes, unicode_defect_string, html_defect_string,
+    automorphism_group, point_group
 
 
 ########################################################### FILE NAMES AND PATHS
