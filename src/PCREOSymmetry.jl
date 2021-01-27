@@ -9,6 +9,7 @@ using Suppressor: @suppress
 export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     chiral_octahedral_group, full_octahedral_group,
     chiral_icosahedral_group, full_icosahedral_group,
+    octahedron_vertices, octahedron_edge_centers, octahedron_face_centers,
     multiplication_table, count_central_elements, degenerate_orbits,
     symmetrized_riesz_energy, symmetrized_riesz_gradient!
 
@@ -221,6 +222,61 @@ full_icosahedral_group(::Type{T}) where {T} =
          -chiral_icosahedral_group(T))
 
 
+############################################################## POLYHEDRAL ORBITS
+
+
+function octahedron_vertices(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    _one = one(T)
+    _zero = zero(T)
+    return [
+        V(+_one, _zero, _zero),
+        V(-_one, _zero, _zero),
+        V(_zero, +_one, _zero),
+        V(_zero, -_one, _zero),
+        V(_zero, _zero, +_one),
+        V(_zero, _zero, -_one),
+    ]
+end
+
+
+function octahedron_edge_centers(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    irt2 = inv(sqrt(one(T) + one(T)))
+    _zero = zero(T)
+    return [
+        V(_zero, +irt2, +irt2),
+        V(_zero, +irt2, -irt2),
+        V(_zero, -irt2, +irt2),
+        V(_zero, -irt2, -irt2),
+        V(+irt2, _zero, +irt2),
+        V(-irt2, _zero, +irt2),
+        V(+irt2, _zero, -irt2),
+        V(-irt2, _zero, -irt2),
+        V(+irt2, +irt2, _zero),
+        V(+irt2, -irt2, _zero),
+        V(-irt2, +irt2, _zero),
+        V(-irt2, -irt2, _zero),
+    ]
+end
+
+
+function octahedron_face_centers(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    irt3 = inv(sqrt(one(T) + one(T) + one(T)))
+    return [
+        V(+irt3, +irt3, +irt3),
+        V(+irt3, +irt3, -irt3),
+        V(+irt3, -irt3, +irt3),
+        V(+irt3, -irt3, -irt3),
+        V(-irt3, +irt3, +irt3),
+        V(-irt3, +irt3, -irt3),
+        V(-irt3, -irt3, +irt3),
+        V(-irt3, -irt3, -irt3),
+    ]
+end
+
+
 ####################################################### ABSTRACT GROUP STRUCTURE
 
 
@@ -355,7 +411,7 @@ function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
 end
 
 
-################################################################################
+####################################################### SYMMETRIZED RIESZ ENERGY
 
 
 # Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
