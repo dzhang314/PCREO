@@ -126,7 +126,7 @@ function convex_hull_facets(points::Matrix{Float64})
     end
     close(process)
     while process_running(process)
-        sleep(0.001)
+        sleep(0.001) # minimum allowed sleep time
     end
     first = true
     num_facets = 0
@@ -231,11 +231,11 @@ end
 function distances(points::Matrix{T}) where {T}
     dimension, num_points = size(points)
     num_pairs = (num_points * (num_points - 1)) >> 1
-    result = Vector{T}(undef, num_pairs)
+    result = Vector{real(T)}(undef, num_pairs)
     p = 0
     for i = 1 : num_points-1
         for j = i+1 : num_points
-            dist_sq = zero(T)
+            dist_sq = zero(real(T))
             @simd ivdep for k = 1 : dimension
                 @inbounds dist_sq += abs2(points[k,i] - points[k,j])
             end
@@ -249,11 +249,11 @@ end
 function labeled_distances(points::Matrix{T}) where {T}
     dimension, num_points = size(points)
     num_pairs = (num_points * (num_points - 1)) >> 1
-    result = Vector{Tuple{T,Int,Int}}(undef, num_pairs)
+    result = Vector{Tuple{real(T),Int,Int}}(undef, num_pairs)
     p = 0
     for i = 1 : num_points-1
         for j = i+1 : num_points
-            dist_sq = zero(T)
+            dist_sq = zero(real(T))
             @simd ivdep for k = 1 : dimension
                 @inbounds dist_sq += abs2(points[k,i] - points[k,j])
             end
