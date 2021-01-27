@@ -106,9 +106,12 @@ function spherical_riesz_hessian_spectral_gap(points)
     num_expected_zeros = div(dim * (dim - 1), 2) + num_points
     expected_zero_vals = vals[1:num_expected_zeros]
     expected_nonzero_vals = vals[num_expected_zeros+1:end]
-    @assert all(!signbit, expected_nonzero_vals)
-    return (maximum(abs.(expected_zero_vals)) /
-            minimum(expected_nonzero_vals))
+    if all(!signbit, expected_nonzero_vals)
+        return (maximum(abs.(expected_zero_vals)) /
+                minimum(expected_nonzero_vals))
+    else
+        return Inf
+    end
 end
 
 
