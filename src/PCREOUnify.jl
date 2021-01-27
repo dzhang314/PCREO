@@ -1,8 +1,8 @@
-push!(LOAD_PATH, @__DIR__)
-
 using NearestNeighbors
-using PCREO
 using ProgressMeter
+
+push!(LOAD_PATH, @__DIR__)
+using PCREO
 
 
 function unify(bucket, database)

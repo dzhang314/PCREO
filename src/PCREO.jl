@@ -1,9 +1,11 @@
 module PCREO
 
-using LinearAlgebra: cross, det, svd
+using GenericLinearAlgebra
+using LinearAlgebra: cross, det, eigvals!, svd
 using NearestNeighbors: KDTree, knn
 
-using DZOptimization: half, norm, normalize_columns!, unsafe_sqrt
+using DZOptimization: dot, half, norm, normalize!, normalize_columns!,
+    unsafe_sqrt
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, riesz_hessian!,
     constrain_riesz_gradient_sphere!, constrain_riesz_hessian_sphere!
@@ -13,7 +15,10 @@ export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
     PCREO_GRAPH_DIRECTORY, PCREO_FACET_ERROR_DIRECTORY,
     riesz_energy, constrain_sphere!,
     spherical_riesz_gradient!, spherical_riesz_gradient,
-    spherical_riesz_hessian, PCREORecord,
+    spherical_riesz_hessian, spherical_riesz_gradient_norm,
+    spherical_riesz_hessian_spectral_gap,
+    convex_hull_facets, facet_normal_vector, parallel_facet_distance,
+    PCREORecord,
     distances, labeled_distances, bucket_by_first, middle,
     positive_transformation_matrix, negative_transformation_matrix,
     candidate_isometries, matching_distance,
@@ -42,6 +47,8 @@ const PCREO_GRAPH_DIRECTORY = "D:\\Data\\PCREOGraphs"
 
 const PCREO_FACET_ERROR_DIRECTORY = "D:\\Data\\PCREOFacetErrors"
 
+const QCONVEX_PATH = "C:\\Programs\\qhull-2020.2\\bin\\qconvex.exe"
+
 
 ######################################################## RIESZ ENERGY ON SPHERES
 
@@ -69,6 +76,106 @@ function spherical_riesz_hessian(points::Matrix{T}) where {T}
     riesz_hessian!(hess, points)
     constrain_riesz_hessian_sphere!(hess, points, unconstrained_grad)
     return reshape(hess, length(points), length(points))
+end
+
+
+############################################################ CONVERGENCE TESTING
+
+
+spherical_riesz_gradient_norm(points) =
+    maximum(abs.(spherical_riesz_gradient(points)))
+
+
+function symmetrize!(mat::Matrix{T}) where {T}
+    m, n = size(mat)
+    @assert m == n
+    @inbounds for i = 1 : n-1
+        @simd ivdep for j = i+1 : n
+            sym = half(T) * (mat[i, j] + mat[j, i])
+            mat[i, j] = mat[j, i] = sym
+        end
+    end
+    return mat
+end
+
+
+function spherical_riesz_hessian_spectral_gap(points)
+    dim, num_points = size(points)
+    hess = symmetrize!(spherical_riesz_hessian(points))
+    vals = eigvals!(hess)
+    num_expected_zeros = div(dim * (dim - 1), 2) + num_points
+    expected_zero_vals = vals[1:num_expected_zeros]
+    expected_nonzero_vals = vals[num_expected_zeros+1:end]
+    @assert all(!signbit, expected_nonzero_vals)
+    return (maximum(abs.(expected_zero_vals)) /
+            minimum(expected_nonzero_vals))
+end
+
+
+function convex_hull_facets(points::Matrix{Float64})
+    dim, num_points = size(points)
+    buffer = IOBuffer()
+    process = open(`$QCONVEX_PATH i`, buffer, write=true)
+    println(process, dim)
+    println(process, num_points)
+    for j = 1 : num_points
+        for i = 1 : dim
+            print(process, ' ', points[i,j])
+        end
+        println(process)
+    end
+    close(process)
+    while process_running(process)
+        sleep(0.001)
+    end
+    first = true
+    num_facets = 0
+    result = Vector{Int}[]
+    seek(buffer, 0)
+    for line in eachline(buffer)
+        if first
+            num_facets = parse(Int, line)
+            first = false
+        else
+            push!(result, [parse(Int, s) + 1 for s in split(line)])
+        end
+    end
+    @assert num_facets == length(result)
+    return result
+end
+
+
+function facet_normal_vector(points::Matrix{T}) where {T}
+    dimension, num_points = size(points)
+    result = zeros(T, dimension)
+    for i = 1 : num_points - 2
+        for j = i+1 : num_points - 1
+            for k = j+1 : num_points
+                normal = cross(points[:,j] - points[:,i],
+                               points[:,k] - points[:,i])
+                positive = all(signbit, dot(normal, points, dimension, t)
+                                        for t = 1 : num_points)
+                negative = all(!signbit, dot(normal, points, dimension, t)
+                                         for t = 1 : num_points)
+                @assert xor(positive, negative)
+                if positive
+                    result += normal
+                else
+                    result -= normal
+                end
+            end
+        end
+    end
+    return normalize!(result)
+end
+
+
+function parallel_facet_distance(points::Matrix{T},
+                                 facets::Vector{Vector{Int}}) where {T}
+    _, adjacent_facets = adjacency_structure(facets)
+    normals = [facet_normal_vector(points[:,facet]) for facet in facets]
+    return minimum(one(T) - normals[i]' * normals[j]
+                   for (i, j) in adjacent_facets)
 end
 
 
