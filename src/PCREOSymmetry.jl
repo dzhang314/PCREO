@@ -3,13 +3,14 @@ module PCREOSymmetry
 using DZOptimization: norm
 using GenericSVD: svd
 using LinearAlgebra: det, svd
-using StaticArrays: SArray
+using StaticArrays: SArray, SVector
 using Suppressor: @suppress
 
 export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     chiral_octahedral_group, full_octahedral_group,
     chiral_icosahedral_group, full_icosahedral_group,
-    multiplication_table, count_central_elements, degenerate_orbits
+    multiplication_table, count_central_elements, degenerate_orbits,
+    symmetrized_riesz_energy, symmetrized_riesz_gradient!
 
 
 ######################################################## POLYHEDRAL POINT GROUPS
@@ -351,6 +352,113 @@ function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
     end
     return [[@inbounds clusters[i][1] for i in comp]
             for comp in connected_components(adjacency_lists)]
+end
+
+
+################################################################################
+
+
+# Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
+
+# @benchmark symmetrized_riesz_energy(points, group, external_points) setup=(
+#     points=randn(3, 10); group=chiral_tetrahedral_group(Float64);
+#     external_points=SVector{3,Float64}.(eachcol(randn(3, 5))))
+
+# view_asm(symmetrized_riesz_energy,
+#     Matrix{Float64},
+#     Vector{SArray{Tuple{3,3},Float64,2,9}},
+#     Vector{SVector{3,Float64}})
+
+function symmetrized_riesz_energy(
+        points::AbstractMatrix{T},
+        group::Vector{SArray{Tuple{N,N},T,2,M}},
+        external_points::Vector{SArray{Tuple{N},T,1,N}}) where {T,N,M}
+    dim, num_points = size(points)
+    group_size = length(group)
+    num_external_points = length(external_points)
+    energy = zero(T)
+    for i = 1 : num_points
+        @inbounds p = SVector{N,T}(view(points, 1:N, i))
+        for j = 2 : group_size
+            @inbounds g = group[j]
+            energy += 0.5 * inv(norm(g*p - p))
+        end
+    end
+    for i = 2 : num_points
+        @inbounds p = SVector{N,T}(view(points, 1:N, i))
+        for g in group
+            gp = g * p
+            for j = 1 : i-1
+                @inbounds q = SVector{N,T}(view(points, 1:N, j))
+                energy += inv(norm(gp - q))
+            end
+        end
+    end
+    energy *= group_size
+    for i = 1 : num_points
+        @inbounds p = SVector{N,T}(view(points, 1:N, i))
+        for g in group
+            gp = g * p
+            for j = 1 : num_external_points
+                @inbounds q = external_points[j]
+                energy += inv(norm(gp - q))
+            end
+        end
+    end
+    return energy
+end
+
+
+# Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
+
+# @benchmark symmetrized_riesz_gradient!(
+#     grad, points, group, external_points) setup=(
+#     points=randn(3, 10); grad=similar(points);
+#     group=chiral_tetrahedral_group(Float64);
+#     external_points=SVector{3,Float64}.(eachcol(randn(3, 5))))
+
+# view_asm(symmetrized_riesz_gradient!,
+#     Matrix{Float64}, Matrix{Float64},
+#     Vector{SArray{Tuple{3,3},Float64,2,9}},
+#     Vector{SVector{3,Float64}})
+
+function symmetrized_riesz_gradient!(
+        grad::AbstractMatrix{T},
+        points::AbstractMatrix{T},
+        group::Vector{SArray{Tuple{N,N},T,2,M}},
+        external_points::Vector{SArray{Tuple{N},T,1,N}}) where {T,N,M}
+    dim, num_points = size(points)
+    group_size = length(group)
+    num_external_points = length(external_points)
+    for i = 1 : num_points
+        @inbounds p = SVector{N,T}(view(points, 1:N, i))
+        force = zero(SVector{N,T})
+        for j = 2 : group_size
+            @inbounds r = group[j] * p - p
+            force += r / norm(r)^3
+        end
+        for j = 1 : num_points
+            if i != j
+                @inbounds q = SVector{N,T}(view(points, 1:N, j))
+                for g in group
+                    r = g * q - p
+                    force += r / norm(r)^3
+                end
+            end
+        end
+        force *= group_size
+        for j = 1 : num_external_points
+            @inbounds q = external_points[j]
+            for g in group
+                r = g * q - p
+                force += r / norm(r)^3
+            end
+        end
+        @simd ivdep for j = 1 : N
+            @inbounds grad[j,i] = force[j]
+        end
+    end
+    return grad
 end
 
 
