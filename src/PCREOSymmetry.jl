@@ -1,6 +1,8 @@
 module PCREOSymmetry
 
 using DZOptimization: norm
+using DZOptimization.ExampleFunctions: riesz_energy,
+    constrain_riesz_gradient_sphere!
 using GenericSVD: svd
 using LinearAlgebra: det, svd
 using StaticArrays: SArray, SVector
@@ -13,8 +15,10 @@ export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     tetrahedron_rotoinversion_centers, pyritohedron_vertices,
     octahedron_vertices, octahedron_edge_centers, octahedron_face_centers,
     icosahedron_vertices, icosahedron_edge_centers, icosahedron_face_centers,
+    POLYHEDRAL_POINT_GROUPS,
     multiplication_table, count_central_elements, degenerate_orbits,
-    symmetrized_riesz_energy, symmetrized_riesz_gradient!
+    symmetrized_riesz_energy, symmetrized_riesz_gradient!,
+    symmetrized_riesz_functors
 
 
 ######################################################## POLYHEDRAL POINT GROUPS
@@ -431,6 +435,25 @@ function icosahedron_face_centers(::Type{T}) where {T}
 end
 
 
+const POLYHEDRAL_POINT_GROUPS = [
+    (chiral_tetrahedral_group, [tetrahedron_vertices,
+        tetrahedron_edge_centers, tetrahedron_face_centers]),
+    (full_tetrahedral_group, [
+        tetrahedron_vertices, tetrahedron_edge_centers,
+        tetrahedron_face_centers, tetrahedron_rotoinversion_centers]),
+    (pyritohedral_group, [
+        pyritohedron_vertices, tetrahedron_edge_centers]),
+    (chiral_octahedral_group, [octahedron_vertices,
+        octahedron_edge_centers, octahedron_face_centers]),
+    (full_octahedral_group, [octahedron_vertices,
+        octahedron_edge_centers, octahedron_face_centers]),
+    (chiral_icosahedral_group, [icosahedron_vertices,
+        icosahedron_edge_centers, icosahedron_face_centers]),
+    (full_icosahedral_group, [icosahedron_vertices,
+        icosahedron_edge_centers, icosahedron_face_centers]),
+]
+
+
 ####################################################### ABSTRACT GROUP STRUCTURE
 
 
@@ -669,6 +692,53 @@ function symmetrized_riesz_gradient!(
         end
     end
     return grad
+end
+
+
+struct SymmetrizedRieszEnergyFunctor{T}
+    group::Vector{SArray{Tuple{3,3},T,2,9}}
+    external_points::Vector{SArray{Tuple{3},T,1,3}}
+    external_energy::T
+end
+
+
+struct SymmetrizedRieszGradientFunctor{T}
+    group::Vector{SArray{Tuple{3,3},T,2,9}}
+    external_points::Vector{SArray{Tuple{3},T,1,3}}
+end
+
+
+function (sref::SymmetrizedRieszEnergyFunctor{T})(
+          points::AbstractMatrix{T}) where {T}
+    return sref.external_energy + symmetrized_riesz_energy(
+        points, sref.group, sref.external_points)
+end
+
+
+function (srgf::SymmetrizedRieszGradientFunctor{T})(
+          grad::AbstractMatrix{T}, points::AbstractMatrix{T}) where {T}
+    symmetrized_riesz_gradient!(grad, points, srgf.group, srgf.external_points)
+    constrain_riesz_gradient_sphere!(grad, points)
+    return grad
+end
+
+
+function symmetrized_riesz_functors(
+        ::Type{T}, group_function::Function,
+        orbit_functions::Vector{Function}) where {T}
+    group = group_function(T)::Vector{SArray{Tuple{3,3},T,2,9}}
+    external_points = vcat([orbit_function(T)::Vector{SArray{Tuple{3},T,1,3}}
+                            for orbit_function in orbit_functions]...)
+    external_points_matrix = Matrix{T}(undef, 3, length(external_points))
+    for (i, point) in enumerate(external_points)
+        @simd ivdep for j = 1 : 3
+            @inbounds external_points_matrix[j,i] = point[j]
+        end
+    end
+    external_energy = riesz_energy(external_points_matrix)
+    return (SymmetrizedRieszEnergyFunctor{T}(group, external_points,
+                                             external_energy),
+            SymmetrizedRieszGradientFunctor{T}(group, external_points))
 end
 
 
