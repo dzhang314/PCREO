@@ -10,6 +10,7 @@ export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     chiral_octahedral_group, full_octahedral_group,
     chiral_icosahedral_group, full_icosahedral_group,
     octahedron_vertices, octahedron_edge_centers, octahedron_face_centers,
+    icosahedron_vertices, icosahedron_edge_centers, icosahedron_face_centers,
     multiplication_table, count_central_elements, degenerate_orbits,
     symmetrized_riesz_energy, symmetrized_riesz_gradient!
 
@@ -265,6 +266,117 @@ function octahedron_face_centers(::Type{T}) where {T}
     V = SArray{Tuple{3},T,1,3}
     irt3 = inv(sqrt(one(T) + one(T) + one(T)))
     return [
+        V(+irt3, +irt3, +irt3),
+        V(+irt3, +irt3, -irt3),
+        V(+irt3, -irt3, +irt3),
+        V(+irt3, -irt3, -irt3),
+        V(-irt3, +irt3, +irt3),
+        V(-irt3, +irt3, -irt3),
+        V(-irt3, -irt3, +irt3),
+        V(-irt3, -irt3, -irt3),
+    ]
+end
+
+
+function icosahedron_vertices(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    _zero = zero(T)
+    _one = one(T)
+    two = _one + _one
+    five = two + two + _one
+    half = inv(two)
+    sqrt_five = sqrt(five)
+    phi = half * (sqrt_five + _one)
+    psi = half * (sqrt_five - _one)
+    qdrt_five = sqrt(sqrt_five)
+    a = inv(qdrt_five * sqrt(phi))
+    b = inv(qdrt_five * sqrt(psi))
+    return [
+        V(_zero, +b, +a),
+        V(_zero, -b, +a),
+        V(_zero, +b, -a),
+        V(_zero, -b, -a),
+        V(+a, _zero, +b),
+        V(+a, _zero, -b),
+        V(-a, _zero, +b),
+        V(-a, _zero, -b),
+        V(+b, +a, _zero),
+        V(-b, +a, _zero),
+        V(+b, -a, _zero),
+        V(-b, -a, _zero),
+    ]
+end
+
+
+function icosahedron_edge_centers(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    _zero = zero(T)
+    _one = one(T)
+    two = _one + _one
+    four = two + two
+    five = four + _one
+    half = inv(two)
+    quarter = inv(four)
+    hphi = quarter * (sqrt(five) + _one)
+    hpsi = quarter * (sqrt(five) - _one)
+    return [
+        V(+_one, _zero, _zero),
+        V(-_one, _zero, _zero),
+        V(_zero, +_one, _zero),
+        V(_zero, -_one, _zero),
+        V(_zero, _zero, +_one),
+        V(_zero, _zero, -_one),
+        V(+half, +hphi, +hpsi),
+        V(+half, +hphi, -hpsi),
+        V(+half, -hphi, +hpsi),
+        V(+half, -hphi, -hpsi),
+        V(-half, +hphi, +hpsi),
+        V(-half, +hphi, -hpsi),
+        V(-half, -hphi, +hpsi),
+        V(-half, -hphi, -hpsi),
+        V(+hpsi, +half, +hphi),
+        V(-hpsi, +half, +hphi),
+        V(+hpsi, +half, -hphi),
+        V(-hpsi, +half, -hphi),
+        V(+hpsi, -half, +hphi),
+        V(-hpsi, -half, +hphi),
+        V(+hpsi, -half, -hphi),
+        V(-hpsi, -half, -hphi),
+        V(+hphi, +hpsi, +half),
+        V(+hphi, -hpsi, +half),
+        V(-hphi, +hpsi, +half),
+        V(-hphi, -hpsi, +half),
+        V(+hphi, +hpsi, -half),
+        V(+hphi, -hpsi, -half),
+        V(-hphi, +hpsi, -half),
+        V(-hphi, -hpsi, -half),
+    ]
+end
+
+
+function icosahedron_face_centers(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    _zero = zero(T)
+    _one = one(T)
+    three = _one + _one + _one
+    five = three + _one + _one
+    six = three + three
+    irt3 = inv(sqrt(three))
+    a = sqrt((three + sqrt(five)) / six)
+    b = sqrt((three - sqrt(five)) / six)
+    return [
+        V(_zero, +b, +a),
+        V(_zero, -b, +a),
+        V(_zero, +b, -a),
+        V(_zero, -b, -a),
+        V(+a, _zero, +b),
+        V(+a, _zero, -b),
+        V(-a, _zero, +b),
+        V(-a, _zero, -b),
+        V(+b, +a, _zero),
+        V(-b, +a, _zero),
+        V(+b, -a, _zero),
+        V(-b, -a, _zero),
         V(+irt3, +irt3, +irt3),
         V(+irt3, +irt3, -irt3),
         V(+irt3, -irt3, +irt3),
