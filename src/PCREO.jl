@@ -5,7 +5,7 @@ using LinearAlgebra: cross, det, eigvals!, svd
 using NearestNeighbors: KDTree, knn
 
 using DZOptimization: dot, half, norm, normalize!, normalize_columns!,
-    unsafe_sqrt
+    step!, unsafe_sqrt
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, riesz_hessian!,
     constrain_riesz_gradient_sphere!, constrain_riesz_hessian_sphere!
@@ -15,7 +15,7 @@ export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
     PCREO_GRAPH_DIRECTORY, PCREO_FACET_ERROR_DIRECTORY,
     riesz_energy, constrain_sphere!,
     spherical_riesz_gradient!, spherical_riesz_gradient,
-    spherical_riesz_hessian, spherical_riesz_gradient_norm,
+    spherical_riesz_hessian, run!, spherical_riesz_gradient_norm,
     spherical_riesz_hessian_spectral_gap,
     convex_hull_facets, facet_normal_vector, parallel_facet_distance,
     PCREORecord,
@@ -76,6 +76,43 @@ function spherical_riesz_hessian(points::Matrix{T}) where {T}
     riesz_hessian!(hess, points)
     constrain_riesz_hessian_sphere!(hess, points, unconstrained_grad)
     return reshape(hess, length(points), length(points))
+end
+
+
+################################################################### OPTIMIZATION
+
+
+const TERM = (stdout isa Base.TTY)
+const FRAME_RATE = 2
+const FRAME_TIME = round(Int, 1_000_000_000 / FRAME_RATE)
+
+
+if TERM
+
+    function run!(opt)
+        last_print_time = time_ns()
+        while !opt.has_converged[]
+            step!(opt)
+            if time_ns() - last_print_time >= FRAME_TIME
+                println(opt.iteration_count[], '\t',
+                        opt.current_objective_value[])
+                last_print_time += FRAME_TIME
+            end
+        end
+        println(opt.iteration_count[], '\t',
+                opt.current_objective_value[])
+        return opt
+    end
+
+else
+
+    function run!(opt)
+        while !opt.has_converged[]
+            step!(opt)
+        end
+        return opt
+    end
+
 end
 
 
