@@ -53,7 +53,7 @@ function generate_and_save_configuration(
         c3 = Float64(parallel_facet_distance(full_points, facets))
         prefix = "PCREO-03-$(lpad(num_full_points, 4, '0'))"
         filename = "$prefix-$(uuid4()).csv"
-        open(joinpath("D:\\Data\\PCREOSymmetry", filename), "w+") do io
+        open(filename, "w+") do io
             println(io, 3)
             println(io, num_full_points)
             println(io, opt3.current_objective_value[])
