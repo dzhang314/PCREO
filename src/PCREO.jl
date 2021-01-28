@@ -99,16 +99,16 @@ function symmetrize!(mat::Matrix{T}) where {T}
 end
 
 
-function spherical_riesz_hessian_spectral_gap(points)
+function spherical_riesz_hessian_spectral_gap(points::Matrix{T}) where {T}
     dim, num_points = size(points)
     hess = symmetrize!(spherical_riesz_hessian(points))
-    vals = eigvals!(hess)
+    vals = eigvals!(Float64.(hess))
     num_expected_zeros = div(dim * (dim - 1), 2) + num_points
     expected_zero_vals = vals[1:num_expected_zeros]
-    expected_nonzero_vals = vals[num_expected_zeros+1:end]
-    if all(!signbit, expected_nonzero_vals)
+    expected_positive_vals = vals[num_expected_zeros+1:end]
+    if all(!signbit, expected_positive_vals)
         return (maximum(abs.(expected_zero_vals)) /
-                minimum(expected_nonzero_vals))
+                minimum(expected_positive_vals))
     else
         return Inf
     end
@@ -404,14 +404,17 @@ function incidence_degrees(facets::Vector{Vector{Int}})
 end
 
 
-function connected_components(adjacency_lists::Dict{Int,Vector{Int}})
-    visited = Dict(v => false for (v, l) in adjacency_lists)
-    components = Vector{Int}[]
+function connected_components(adjacency_lists::Dict{V,Vector{V}}) where {V}
+    visited = Dict{V,Bool}()
+    for (v, l) in adjacency_lists
+        visited[v] = false
+    end
+    components = Vector{V}[]
     for (v, l) in adjacency_lists
         if !visited[v]
             visited[v] = true
             current_component = [v]
-            to_visit = append!([], l)
+            to_visit = copy(l)
             while !isempty(to_visit)
                 w = pop!(to_visit)
                 if !visited[w]
