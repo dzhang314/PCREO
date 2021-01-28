@@ -9,6 +9,8 @@ using Suppressor: @suppress
 export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     chiral_octahedral_group, full_octahedral_group,
     chiral_icosahedral_group, full_icosahedral_group,
+    tetrahedron_vertices, tetrahedron_edge_centers, tetrahedron_face_centers,
+    tetrahedron_rotoinversion_centers, pyritohedron_vertices,
     octahedron_vertices, octahedron_edge_centers, octahedron_face_centers,
     icosahedron_vertices, icosahedron_edge_centers, icosahedron_face_centers,
     multiplication_table, count_central_elements, degenerate_orbits,
@@ -226,7 +228,20 @@ full_icosahedral_group(::Type{T}) where {T} =
 ############################################################## POLYHEDRAL ORBITS
 
 
-function octahedron_vertices(::Type{T}) where {T}
+function tetrahedron_vertices(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
+    _one = one(T)
+    irt3 = inv(sqrt(_one + _one + _one))
+    return [
+        V(+irt3, +irt3, +irt3),
+        V(+irt3, -irt3, -irt3),
+        V(-irt3, +irt3, -irt3),
+        V(-irt3, -irt3, +irt3),
+    ]
+end
+
+
+function tetrahedron_edge_centers(::Type{T}) where {T}
     V = SArray{Tuple{3},T,1,3}
     _one = one(T)
     _zero = zero(T)
@@ -241,10 +256,24 @@ function octahedron_vertices(::Type{T}) where {T}
 end
 
 
-function octahedron_edge_centers(::Type{T}) where {T}
+function tetrahedron_face_centers(::Type{T}) where {T}
     V = SArray{Tuple{3},T,1,3}
-    irt2 = inv(sqrt(one(T) + one(T)))
+    _one = one(T)
+    irt3 = inv(sqrt(_one + _one + _one))
+    return [
+        V(-irt3, -irt3, -irt3),
+        V(-irt3, +irt3, +irt3),
+        V(+irt3, -irt3, +irt3),
+        V(+irt3, +irt3, -irt3),
+    ]
+end
+
+
+function tetrahedron_rotoinversion_centers(::Type{T}) where {T}
+    V = SArray{Tuple{3},T,1,3}
     _zero = zero(T)
+    _one = one(T)
+    irt2 = inv(sqrt(_one + _one))
     return [
         V(_zero, +irt2, +irt2),
         V(_zero, +irt2, -irt2),
@@ -262,9 +291,10 @@ function octahedron_edge_centers(::Type{T}) where {T}
 end
 
 
-function octahedron_face_centers(::Type{T}) where {T}
+function pyritohedron_vertices(::Type{T}) where {T}
     V = SArray{Tuple{3},T,1,3}
-    irt3 = inv(sqrt(one(T) + one(T) + one(T)))
+    _one = one(T)
+    irt3 = inv(sqrt(_one + _one + _one))
     return [
         V(+irt3, +irt3, +irt3),
         V(+irt3, +irt3, -irt3),
@@ -276,6 +306,18 @@ function octahedron_face_centers(::Type{T}) where {T}
         V(-irt3, -irt3, -irt3),
     ]
 end
+
+
+octahedron_vertices(::Type{T}) where {T} =
+    tetrahedron_edge_centers(T)
+
+
+octahedron_edge_centers(::Type{T}) where {T} =
+    tetrahedron_rotoinversion_centers(T)
+
+
+octahedron_face_centers(::Type{T}) where {T} =
+    pyritohedron_vertices(T)
 
 
 function icosahedron_vertices(::Type{T}) where {T}
