@@ -1,14 +1,13 @@
-module PCREOSymmetry
+module PointGroups
 
-using DZOptimization: norm
-using DZOptimization.ExampleFunctions: riesz_energy,
-    constrain_riesz_gradient_sphere!
 using GenericSVD: svd
 using NearestNeighbors: KDTree, nn
-using StaticArrays: SArray, SVector, cross, det, svd
+using StaticArrays: SArray, SVector, cross, det, norm, svd
 using Suppressor: @suppress
 
-export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
+export cyclic_group, rotoreflection_group, pinwheel_group, pyramid_group,
+    dihedral_group, prismatic_group, antiprismatic_group,
+    chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     chiral_octahedral_group, full_octahedral_group,
     chiral_icosahedral_group, full_icosahedral_group,
     tetrahedron_vertices, tetrahedron_edge_centers, tetrahedron_face_centers,
@@ -17,8 +16,122 @@ export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     icosahedron_vertices, icosahedron_edge_centers, icosahedron_face_centers,
     POLYHEDRAL_POINT_GROUPS,
     multiplication_table, count_central_elements, degenerate_orbits,
-    symmetrized_riesz_energy, symmetrized_riesz_gradient!,
-    symmetrized_riesz_functors, isometric, isometries
+    isometric, isometries
+
+
+######################################################### 3D SYMMETRY OPERATIONS
+
+
+function rotation_matrix_z(::Type{T}, i::Int, n::Int) where {T}
+    _zero = zero(T)
+    _one = one(T)
+    if i % n == 0
+        return SArray{Tuple{3,3},T,2,9}(
+            +_one, _zero, _zero,
+            _zero, +_one, _zero,
+            _zero, _zero, +_one)
+    elseif iseven(n) && (i % n) == (n >> 1)
+        return SArray{Tuple{3,3},T,2,9}(
+            -_one, _zero, _zero,
+            _zero, -_one, _zero,
+            _zero, _zero, +_one)
+    end
+    setprecision(BigFloat, 2200) do
+        c = T(cospi(BigFloat(2*i) / BigFloat(n)))
+        s = T(sinpi(BigFloat(2*i) / BigFloat(n)))
+        return SArray{Tuple{3,3},T,2,9}(
+            c, s, _zero, -s, c, _zero, _zero, _zero, _one)
+    end
+end
+
+
+function rotoreflection_matrix_z(::Type{T}, i::Int, n::Int) where {T}
+    _zero = zero(T)
+    _one = one(T)
+    if i % n == 0
+        return SArray{Tuple{3,3},T,2,9}(
+            +_one, _zero, _zero,
+            _zero, +_one, _zero,
+            _zero, _zero, -_one)
+    elseif iseven(n) && (i % n) == (n >> 1)
+        return SArray{Tuple{3,3},T,2,9}(
+            -_one, _zero, _zero,
+            _zero, -_one, _zero,
+            _zero, _zero, -_one)
+    end
+    setprecision(BigFloat, 2200) do
+        c = T(cospi(BigFloat(2*i) / BigFloat(n)))
+        s = T(sinpi(BigFloat(2*i) / BigFloat(n)))
+        return SArray{Tuple{3,3},T,2,9}(
+            c, s, _zero, -s, c, _zero, _zero, _zero, -_one)
+    end
+end
+
+
+function rotation_matrix_x_pi(::Type{T}) where {T}
+    _zero = zero(T)
+    _one = one(T)
+    return SArray{Tuple{3,3},T,2,9}(
+        +_one, _zero, _zero,
+        _zero, -_one, _zero,
+        _zero, _zero, -_one)
+end
+
+
+function reflection_matrix_y(::Type{T}) where {T}
+    _zero = zero(T)
+    _one = one(T)
+    return SArray{Tuple{3,3},T,2,9}(
+        +_one, _zero, _zero,
+        _zero, -_one, _zero,
+        _zero, _zero, +_one)
+end
+
+
+############################################################# AXIAL POINT GROUPS
+
+
+cyclic_group(::Type{T}, n::Int) where {T} =
+    [rotation_matrix_z(T, i, n) for i = 0 : n-1]
+
+
+function rotoreflection_group(::Type{T}, n::Int) where {T}
+    @assert iseven(n)
+    return [(iseven(i)
+        ? rotation_matrix_z(T, i, n)
+        : rotoreflection_matrix_z(T, i, n))
+        for i = 0 : n-1]
+end
+
+
+pinwheel_group(::Type{T}, n::Int) where {T} = vcat(
+    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
+    [rotoreflection_matrix_z(T, i, n) for i = 0 : n-1])
+
+
+pyramid_group(::Type{T}, n::Int) where {T} = vcat(
+    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
+    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0 : n-1])
+
+
+dihedral_group(::Type{T}, n::Int) where {T} = vcat(
+    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
+    [rotation_matrix_z(T, i, n) * rotation_matrix_x_pi(T) for i = 0 : n-1])
+
+
+prismatic_group(::Type{T}, n::Int) where {T} = vcat(
+    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
+    [rotation_matrix_z(T, i, n) * rotation_matrix_x_pi(T) for i = 0 : n-1],
+    [rotoreflection_matrix_z(T, i, n) for i = 0 : n-1],
+    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0 : n-1])
+
+
+antiprismatic_group(::Type{T}, n::Int) where {T} = vcat(
+    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
+    [rotoreflection_matrix_z(T, i, 2*n) for i = 1 : 2 : 2*n],
+    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0 : n-1],
+    [rotoreflection_matrix_z(T, i, 2*n) * reflection_matrix_y(T)
+     for i = 1 : 2 : 2*n])
 
 
 ######################################################## POLYHEDRAL POINT GROUPS
@@ -526,7 +639,7 @@ end
 
 
 function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
-                           epsilon=4096*eps(T)) where {T}
+                           epsilon) where {T}
     Point = SArray{Tuple{3},T,1,3}
     points = Vector{Point}()
     for (i, g) in enumerate(group)
@@ -580,7 +693,7 @@ function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
 end
 
 
-################################################################################
+############################################################# FINDING ISOMETRIES
 
 
 function labeled_distances(points::Vector{SVector{N,T}}) where {T,N}
@@ -687,158 +800,6 @@ function isometries(
 end
 
 
-####################################################### SYMMETRIZED RIESZ ENERGY
+################################################################################
 
-
-# Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
-
-# @benchmark symmetrized_riesz_energy(points, group, external_points) setup=(
-#     points=randn(3, 10); group=chiral_tetrahedral_group(Float64);
-#     external_points=SVector{3,Float64}.(eachcol(randn(3, 5))))
-
-# view_asm(symmetrized_riesz_energy,
-#     Matrix{Float64},
-#     Vector{SArray{Tuple{3,3},Float64,2,9}},
-#     Vector{SVector{3,Float64}})
-
-function symmetrized_riesz_energy(
-        points::AbstractMatrix{T},
-        group::Vector{SArray{Tuple{N,N},T,2,M}},
-        external_points::Vector{SArray{Tuple{N},T,1,N}}) where {T,N,M}
-    dim, num_points = size(points)
-    group_size = length(group)
-    num_external_points = length(external_points)
-    energy = zero(T)
-    for i = 1 : num_points
-        @inbounds p = SVector{N,T}(view(points, 1:N, i))
-        for j = 2 : group_size
-            @inbounds g = group[j]
-            energy += 0.5 * inv(norm(g*p - p))
-        end
-    end
-    for i = 2 : num_points
-        @inbounds p = SVector{N,T}(view(points, 1:N, i))
-        for g in group
-            gp = g * p
-            for j = 1 : i-1
-                @inbounds q = SVector{N,T}(view(points, 1:N, j))
-                energy += inv(norm(gp - q))
-            end
-        end
-    end
-    energy *= group_size
-    for i = 1 : num_points
-        @inbounds p = SVector{N,T}(view(points, 1:N, i))
-        for g in group
-            gp = g * p
-            for j = 1 : num_external_points
-                @inbounds q = external_points[j]
-                energy += inv(norm(gp - q))
-            end
-        end
-    end
-    return energy
-end
-
-
-# Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
-
-# @benchmark symmetrized_riesz_gradient!(
-#     grad, points, group, external_points) setup=(
-#     points=randn(3, 10); grad=similar(points);
-#     group=chiral_tetrahedral_group(Float64);
-#     external_points=SVector{3,Float64}.(eachcol(randn(3, 5))))
-
-# view_asm(symmetrized_riesz_gradient!,
-#     Matrix{Float64}, Matrix{Float64},
-#     Vector{SArray{Tuple{3,3},Float64,2,9}},
-#     Vector{SVector{3,Float64}})
-
-function symmetrized_riesz_gradient!(
-        grad::AbstractMatrix{T},
-        points::AbstractMatrix{T},
-        group::Vector{SArray{Tuple{N,N},T,2,M}},
-        external_points::Vector{SArray{Tuple{N},T,1,N}}) where {T,N,M}
-    dim, num_points = size(points)
-    group_size = length(group)
-    num_external_points = length(external_points)
-    for i = 1 : num_points
-        @inbounds p = SVector{N,T}(view(points, 1:N, i))
-        force = zero(SVector{N,T})
-        for j = 2 : group_size
-            @inbounds r = group[j] * p - p
-            force += r / norm(r)^3
-        end
-        for j = 1 : num_points
-            if i != j
-                @inbounds q = SVector{N,T}(view(points, 1:N, j))
-                for g in group
-                    r = g * q - p
-                    force += r / norm(r)^3
-                end
-            end
-        end
-        force *= group_size
-        for j = 1 : num_external_points
-            @inbounds q = external_points[j]
-            for g in group
-                r = g * q - p
-                force += r / norm(r)^3
-            end
-        end
-        @simd ivdep for j = 1 : N
-            @inbounds grad[j,i] = force[j]
-        end
-    end
-    return grad
-end
-
-
-struct SymmetrizedRieszEnergyFunctor{T}
-    group::Vector{SArray{Tuple{3,3},T,2,9}}
-    external_points::Vector{SArray{Tuple{3},T,1,3}}
-    external_energy::T
-end
-
-
-struct SymmetrizedRieszGradientFunctor{T}
-    group::Vector{SArray{Tuple{3,3},T,2,9}}
-    external_points::Vector{SArray{Tuple{3},T,1,3}}
-end
-
-
-function (sref::SymmetrizedRieszEnergyFunctor{T})(
-          points::AbstractMatrix{T}) where {T}
-    return sref.external_energy + symmetrized_riesz_energy(
-        points, sref.group, sref.external_points)
-end
-
-
-function (srgf::SymmetrizedRieszGradientFunctor{T})(
-          grad::AbstractMatrix{T}, points::AbstractMatrix{T}) where {T}
-    symmetrized_riesz_gradient!(grad, points, srgf.group, srgf.external_points)
-    constrain_riesz_gradient_sphere!(grad, points)
-    return grad
-end
-
-
-function symmetrized_riesz_functors(
-        ::Type{T}, group_function::Function,
-        orbit_functions::Vector{Function}) where {T}
-    group = group_function(T)::Vector{SArray{Tuple{3,3},T,2,9}}
-    external_points = vcat([orbit_function(T)::Vector{SArray{Tuple{3},T,1,3}}
-                            for orbit_function in orbit_functions]...)
-    external_points_matrix = Matrix{T}(undef, 3, length(external_points))
-    for (i, point) in enumerate(external_points)
-        @simd ivdep for j = 1 : 3
-            @inbounds external_points_matrix[j,i] = point[j]
-        end
-    end
-    external_energy = riesz_energy(external_points_matrix)
-    return (SymmetrizedRieszEnergyFunctor{T}(group, external_points,
-                                             external_energy),
-            SymmetrizedRieszGradientFunctor{T}(group, external_points))
-end
-
-
-end # module PCREOSymmetry
+end # module PointGroups
