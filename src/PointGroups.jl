@@ -16,7 +16,7 @@ export cyclic_group, rotoreflection_group, pinwheel_group, pyramid_group,
     icosahedron_vertices, icosahedron_edge_centers, icosahedron_face_centers,
     POLYHEDRAL_POINT_GROUPS,
     multiplication_table, count_central_elements, degenerate_orbits,
-    isometric, isometries
+    isometric, isometries, identify_point_group
 
 
 ######################################################### 3D SYMMETRY OPERATIONS
@@ -797,6 +797,184 @@ function isometries(
         end
     end
     return result
+end
+
+
+################################################################################
+
+
+function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
+                              epsilon) where {T}
+    n = length(group)
+    mul_table, dist = multiplication_table(group)
+    @assert dist <= epsilon
+    @assert (n, n) == size(mul_table)
+
+    id_dist, id = minimum(
+        (inf_norm(mat - one(mat)), i)
+        for (i, mat) in enumerate(group))
+    @assert id_dist <= epsilon
+    @assert issorted(view(mul_table, id, :))
+    @assert issorted(view(mul_table, :, id))
+
+    is_abelian = (mul_table == mul_table')
+
+    order_table = zeros(Int, n)
+    for g = 1 : n
+        acc = g
+        ord = 1
+        while acc != id
+            acc = mul_table[acc,g]
+            ord += 1
+        end
+        order_table[g] = ord
+    end
+    @assert minimum(order_table) == 1
+    max_order = maximum(order_table)
+    is_cyclic = (max_order == n)
+
+    is_chiral = true
+    has_inversion = false
+    has_pure_reflection = false
+    has_max_order_negative_element = false
+
+    _zero = zero(T)
+    _one = one(T)
+    two = _one + _one
+    axes = zeros(SVector{3,T}, n)
+
+    for (i, mat) in enumerate(group)
+        u, s, v = @suppress svd(mat - one(mat); full=true)
+        if inf_norm(s - [_zero, _zero, _zero]) <= epsilon # identity
+            @assert !signbit(det(mat))
+            @assert id == i
+        elseif inf_norm(s - [two, two, two]) <= epsilon # pure inversion
+            @assert signbit(det(mat))
+            is_chiral = false
+            if order_table[i] == max_order
+                has_max_order_negative_element = true
+            end
+            @assert !has_inversion
+            has_inversion = true
+        elseif inf_norm(s - [two, two, _zero]) <= epsilon # 180-deg. rotation
+            @assert !signbit(det(mat))
+            axes[i] = v[:,3]
+        elseif inf_norm(s - [two, _zero, _zero]) <= epsilon # pure reflection
+            @assert signbit(det(mat))
+            is_chiral = false
+            if order_table[i] == max_order
+                has_max_order_negative_element = true
+            end
+            has_pure_reflection = true
+            axes[i] = v[:,1]
+        elseif abs(s[1] - s[2]) <= epsilon # general rotation
+            @assert !signbit(det(mat))
+            @assert s[3] <= epsilon
+            axes[i] = v[:,3]
+        else # general rotoinversion
+            @assert signbit(det(mat))
+            is_chiral = false
+            if order_table[i] == max_order
+                has_max_order_negative_element = true
+            end
+            @assert abs(s[1] - two) <= epsilon
+            @assert abs(s[2] - s[3]) <= epsilon
+            axes[i] = v[:,1]
+        end
+    end
+
+    if n == 1
+        return "C_1"
+    end
+
+    if n == 2
+        if is_chiral
+            return "C_2"
+        else
+            return has_inversion ? "C_i" : "C_s"
+        end
+    end
+
+    if n == 4
+        if is_cyclic
+            return is_chiral ? "C_4" : "S_4"
+        elseif is_chiral
+            return "D_2"
+        else
+            return has_inversion ? "C_2h" : "C_2v"
+        end
+    end
+
+    if n == 8
+        if is_cyclic
+            return is_chiral ? "C_8" : "S_8"
+        elseif is_chiral
+            return "D_4"
+        elseif is_abelian
+            return (max_order == 2) ? "D_2h" : "C_4h"
+        else
+            return has_max_order_negative_element ? "D_2d" : "C_4v"
+        end
+    end
+
+    if is_cyclic
+        @assert is_abelian
+        if is_chiral
+            return "C_$n"
+        elseif has_pure_reflection
+            @assert iseven(n)
+            @assert isodd(n >> 1)
+            return "C_$(n >> 1)h"
+        else
+            @assert iseven(n)
+            return "S_$n"
+        end
+    end
+
+    if is_abelian
+        @assert iseven(n)
+        @assert iseven(n >> 1)
+        return "C_$(n >> 1)h"
+    end
+
+    is_axial = (max_order >= 3) && all(
+        abs(sqrt(abs(axes[i]' * axes[j])) - _one) <= epsilon
+        for i = 1 : n, j = 1 : n
+        if (order_table[i] == max_order &&
+            order_table[j] == max_order))
+
+    if is_axial
+        @assert iseven(n)
+        if is_chiral
+            return "D_$(n >> 1)"
+        elseif !has_max_order_negative_element
+            return "C_$(n >> 1)v"
+        else
+            @assert iseven(n >> 1)
+            if xor(iseven(n >> 2), has_inversion)
+                return "D_$(n >> 2)d"
+            else
+                return "D_$(n >> 2)h"
+            end
+        end
+    else
+        if n == 12
+            return "T"
+        elseif n == 48
+            return "O_h"
+        elseif n == 60
+            return "I"
+        elseif n == 120
+            return "I_h"
+        else
+            @assert n == 24
+            if is_chiral
+                return "O"
+            else
+                return has_inversion ? "T_h" : "T_d"
+            end
+        end
+    end
 end
 
 
