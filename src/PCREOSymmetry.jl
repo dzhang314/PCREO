@@ -4,8 +4,8 @@ using DZOptimization: norm
 using DZOptimization.ExampleFunctions: riesz_energy,
     constrain_riesz_gradient_sphere!
 using GenericSVD: svd
-using LinearAlgebra: det, svd
-using StaticArrays: SArray, SVector
+using NearestNeighbors: KDTree, nn
+using StaticArrays: SArray, SVector, cross, det, svd
 using Suppressor: @suppress
 
 export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
@@ -18,7 +18,7 @@ export chiral_tetrahedral_group, full_tetrahedral_group, pyritohedral_group,
     POLYHEDRAL_POINT_GROUPS,
     multiplication_table, count_central_elements, degenerate_orbits,
     symmetrized_riesz_energy, symmetrized_riesz_gradient!,
-    symmetrized_riesz_functors
+    symmetrized_riesz_functors, isometric, isometries
 
 
 ######################################################## POLYHEDRAL POINT GROUPS
@@ -229,7 +229,7 @@ full_icosahedral_group(::Type{T}) where {T} =
          -chiral_icosahedral_group(T))
 
 
-############################################################## POLYHEDRAL ORBITS
+################################################### DEGENERATE POLYHEDRAL ORBITS
 
 
 function tetrahedron_vertices(::Type{T}) where {T}
@@ -469,17 +469,10 @@ end
 function multiplication_table(
         group::Vector{SArray{Tuple{N,N},T,2,M}}) where {N,T,M}
     n = length(group)
-    result = zeros(Int, n, n)
-    dist = zero(T)
-    for i = 1 : n
-        for j = 1 : n
-            @inbounds d, result[i,j] = minimum(
-                (inf_norm(group[i] * group[j] - group[k]), k)
-                for k = 1 : n)
-            dist = max(dist, d)
-        end
-    end
-    return (result, dist)
+    indices, dists = nn(
+        KDTree(SVector{M,T}.(group)),
+        [SVector{M,T}(g * h) for h in group for g in group])
+    return (reshape(indices, n, n), inf_norm(dists))
 end
 
 
@@ -495,8 +488,7 @@ end
 ################################################################ ORBIT STRUCTURE
 
 
-function rotation_axis(mat::SArray{Tuple{3,3},T,2,9},
-                       epsilon=4096*eps(T)) where {T}
+function rotation_axis(mat::SArray{Tuple{3,3},T,2,9}, epsilon) where {T}
     @assert inf_norm(mat' * mat - one(mat)) <= epsilon
     u, s, v = @suppress svd(mat - sign(det(mat)) * one(mat))
     @assert s[1] > epsilon
@@ -585,6 +577,113 @@ function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
     end
     return [[@inbounds clusters[i][1] for i in comp]
             for comp in connected_components(adjacency_lists)]
+end
+
+
+################################################################################
+
+
+function labeled_distances(points::Vector{SVector{N,T}}) where {T,N}
+    return [(sqrt(sum((points[i] - points[j]).^2)), i, j)
+            for j = 2 : length(points)
+            for i = 1 : j-1]
+end
+
+
+function bucket_by_first(items::Vector{T}, epsilon) where {T}
+    result = Vector{T}[]
+    if length(items) == 0
+        return result
+    end
+    push!(result, [items[1]])
+    for i = 2 : length(items)
+        if abs(items[i][1] - result[end][end][1]) <= epsilon
+            push!(result[end], items[i])
+        else
+            push!(result, [items[i]])
+        end
+    end
+    for bucket in result
+        @assert abs(bucket[end][1] - bucket[1][1]) <=epsilon
+    end
+    return result
+end
+
+
+middle(x::AbstractVector) = x[(length(x) + 1) >> 1]
+
+
+function candidate_isometries(
+        a_points::Vector{SVector{3,T}},
+        b_points::Vector{SVector{3,T}}, epsilon) where {T}
+    _one = one(T)
+    two = _one + _one
+    four = two + two
+    one_fourth = inv(four)
+    seven_fourths = (four + two + _one) * one_fourth
+    result = SArray{Tuple{3,3},T,2,9}[]
+    a_buckets = bucket_by_first(sort!(labeled_distances(a_points)), epsilon)
+    b_buckets = bucket_by_first(sort!(labeled_distances(b_points)), epsilon)
+    if length.(a_buckets) != length.(b_buckets)
+        return result
+    end
+    a_midpoints = [middle(bucket)[1] for bucket in a_buckets]
+    b_midpoints = [middle(bucket)[1] for bucket in b_buckets]
+    for (a, b) in zip(a_midpoints, b_midpoints)
+        if !(abs(a - b) <= epsilon)
+            return result
+        end
+    end
+    selected_bucket = minimum(
+        (length(bucket), abs(one(T) - middle(bucket)[1]), i)
+        for (i, bucket) in enumerate(a_buckets)
+        if one_fourth <= middle(bucket)[1] <= seven_fourths)[3]
+    _, i, j = middle(a_buckets[selected_bucket])
+    u1, v1 = a_points[i], a_points[j]
+    pos_mat = inv(hcat(u1, v1, cross(u1, v1)))
+    neg_mat = inv(hcat(u1, v1, cross(v1, u1)))
+    for (_, k, l) in b_buckets[selected_bucket]
+        u2, v2 = b_points[k], b_points[l]
+        fwd_mat = hcat(u2, v2, cross(u2, v2))
+        rev_mat = hcat(v2, u2, cross(v2, u2))
+        push!(result, fwd_mat * pos_mat)
+        push!(result, fwd_mat * neg_mat)
+        push!(result, rev_mat * pos_mat)
+        push!(result, rev_mat * neg_mat)
+    end
+    for mat in result
+        @assert inf_norm(mat' * mat - one(mat)) <= epsilon
+    end
+    return result
+end
+
+
+function isometric(
+        a_points::Vector{SVector{3,T}},
+        b_points::Vector{SVector{3,T}}, epsilon) where {T}
+    b_tree = KDTree(b_points)
+    for mat in candidate_isometries(a_points, b_points, epsilon)
+        indices, distances = nn(b_tree, [mat * p for p in a_points])
+        if allunique(indices) && (inf_norm(distances) <= epsilon)
+            return true
+        end
+    end
+    return false
+end
+
+
+function isometries(
+        a_points::Vector{SVector{3,T}},
+        b_points::Vector{SVector{3,T}}, epsilon) where {T}
+    result = SArray{Tuple{3,3},T,2,9}[]
+    b_tree = KDTree(b_points)
+    for mat in candidate_isometries(a_points, b_points, epsilon)
+        indices, distances = nn(b_tree, [mat * p for p in a_points])
+        if allunique(indices) && (inf_norm(distances) <= epsilon)
+            push!(result, mat)
+        end
+    end
+    return result
 end
 
 
