@@ -16,11 +16,19 @@ end
 
 
 function generate_and_save_configuration(
-        group::Function, orbits::Vector{Function}, num_points::Int)
+        group::Function, orbits::Vector{Function},
+        num_points::Int, max_points::Int)
+
+    f1, g1! = symmetrized_riesz_functors(Float64, group, orbits)
+    num_full_points = (num_points * length(f1.group) +
+                       length(f1.external_points))
+
+    if num_full_points > max_points
+        return nothing
+    end
 
     initial_points = normalize_columns!(randn(3, num_points))
 
-    f1, g1! = symmetrized_riesz_functors(Float64, group, orbits)
     opt1 = BFGSOptimizer(f1, g1!, constrain_sphere!, initial_points, 1.0e-6)
     run!(opt1)
 
@@ -32,8 +40,6 @@ function generate_and_save_configuration(
     opt3 = BFGSOptimizer(Float64x3, f3, g3!, constrain_sphere!, opt2)
     run!(opt3)
 
-    num_full_points = (num_points * length(f3.group) +
-                       length(f3.external_points))
     full_points = Matrix{Float64x3}(undef, 3, num_full_points)
     k = 0
     for g in f3.group
@@ -101,7 +107,7 @@ function main()
             for (group_function, orbit_functions) in POLYHEDRAL_POINT_GROUPS
                 for selected_orbits in powerset(orbit_functions)
                     generate_and_save_configuration(
-                        group_function, selected_orbits, num_points)
+                        group_function, selected_orbits, num_points, 1000)
                 end
             end
         end
