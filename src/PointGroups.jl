@@ -2,7 +2,7 @@ module PointGroups
 
 using GenericSVD: svd
 using NearestNeighbors: KDTree, nn
-using StaticArrays: SArray, SVector, cross, det, norm, svd
+using StaticArrays: SArray, SVector, cross, det, norm, qr, svd
 using Suppressor: @suppress
 
 export cyclic_group, rotoreflection_group, pinwheel_group, pyramid_group,
@@ -1170,6 +1170,96 @@ antiprismatic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
     equatorial_points(zero(T), T(2)/T(5), n),
     equatorial_points(zero(T), T(3)/T(5), n),
     equatorial_points(-inv(T(5)), inv(T(2)), n))
+
+
+################################################ TEST POINT GROUP IDENTIFICATION
+
+
+function matching_distance(a::Vector{SArray{X,T,R,N}},
+                           b::Vector{SArray{X,T,R,N}}) where {X,T,R,N}
+    if length(a) != length(b)
+        return typemax(T)
+    end
+    a_points = SVector{N,T}.(a)
+    b_points = SVector{N,T}.(b)
+    b_tree = KDTree(b_points)
+    idxs, dists = nn(b_tree, a_points)
+    if !allunique(idxs)
+        return typemax(T)
+    else
+        return maximum(dists)
+    end
+end
+
+
+random_rotation(::Type{T}, ::Val{N}) where {T,N} =
+    qr(SArray{Tuple{N,N},T,2,N*N}(randn(N, N))).Q
+
+
+function test_alignment(
+        points::Vector{SVector{3,T}},
+        expected_group::Vector{SArray{Tuple{3,3},T,2,9}},
+        epsilon) where {T}
+    rotation = random_rotation(T, Val(3))
+    rotated_points = [rotation * p for p in points]
+    name, align = identify_point_group(
+        isometries(rotated_points, epsilon),
+        epsilon)
+    @assert abs(det(align) - one(T)) <= epsilon
+    dist = matching_distance(
+        isometries([align * p for p in rotated_points], epsilon),
+        expected_group)
+    @assert dist <= epsilon
+    return name
+end
+
+
+function test_axial_group_alignment(::Type{T}, n_max::Int,
+                                    epsilon) where {T}
+    cyclic_groups = [
+        test_alignment(cyclic_point_configuration(T, n),
+                       cyclic_group(T, n), epsilon)
+        for n = 1 : n_max]
+    @assert cyclic_groups == ["C_$n" for n = 1 : n_max]
+
+    rotoreflection_groups = [
+        test_alignment(rotoreflection_point_configuration(T, n),
+                       rotoreflection_group(T, n), epsilon)
+        for n = 2 : 2 : n_max]
+    @assert rotoreflection_groups == [n == 2 ? "C_i" : "S_$n"
+                                      for n = 2 : 2 : n_max]
+
+    pinwheel_groups = [
+        test_alignment(pinwheel_point_configuration(T, n),
+                       pinwheel_group(T, n), epsilon)
+        for n = 1 : n_max]
+    @assert pinwheel_groups == [n == 1 ? "C_s" : "C_$(n)h"
+                                for n = 1 : n_max]
+
+    pyramid_groups = [
+        test_alignment(pyramid_point_configuration(T, n),
+                       pyramid_group(T, n), epsilon)
+        for n = 2 : n_max]
+    @assert pyramid_groups == ["C_$(n)v" for n = 2 : n_max]
+
+    dihedral_groups = [
+        test_alignment(dihedral_point_configuration(T, n),
+                       dihedral_group(T, n), epsilon)
+        for n = 2 : n_max]
+    @assert dihedral_groups == ["D_$n" for n = 2 : n_max]
+
+    prismatic_groups = [
+        test_alignment(prismatic_point_configuration(T, n),
+                       prismatic_group(T, n), epsilon)
+        for n = 2 : n_max]
+    @assert prismatic_groups == ["D_$(n)h" for n = 2 : n_max]
+
+    antiprismatic_groups = [
+        test_alignment(antiprismatic_point_configuration(T, n),
+                       antiprismatic_group(T, n), epsilon)
+        for n = 2 : n_max]
+    @assert antiprismatic_groups == ["D_$(n)d" for n = 2 : n_max]
+end
 
 
 ################################################################################
