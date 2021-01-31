@@ -1093,6 +1093,85 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
 end
 
 
+###################################################### TEST POINT CONFIGURATIONS
+
+
+function equatorial_points(height::T, offset::T, n::Int) where {T}
+    _one = one(T)
+    two = _one + _one
+    a = sqrt(_one + height * height)
+    return [SVector{3,T}(
+            cospi(two * (T(i) + offset) / n),
+            sinpi(two * (T(i) + offset) / n),
+            height) / a
+        for i = 0 : n-1]
+end
+
+
+function alternating_equatorial_points(height::T, offset::T, n::Int) where {T}
+    @assert iseven(n)
+    _one = one(T)
+    two = _one + _one
+    a = sqrt(_one + height * height)
+    return [SVector{3,T}(
+            cospi(two * (T(i) + offset) / n),
+            sinpi(two * (T(i) + offset) / n),
+            iseven(i) ? height : -height) / a
+        for i = 0 : n-1]
+end
+
+
+cyclic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(zero(T), zero(T), n),
+    equatorial_points(-inv(T(5)), inv(T(20)), n),
+    equatorial_points(inv(T(10)), T(3)/T(20), n))
+
+
+rotoreflection_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(zero(T), zero(T), n),
+    equatorial_points(zero(T), inv(T(5)), n),
+    alternating_equatorial_points(inv(T(10)), inv(T(5)), n))
+
+
+pinwheel_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(zero(T), zero(T), n),
+    equatorial_points(+inv(T(5)), inv(T(10)), n),
+    equatorial_points(-inv(T(5)), inv(T(10)), n))
+
+
+pyramid_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(inv(T(5)), zero(T), n),
+    equatorial_points(zero(T), +inv(T(10)), n),
+    equatorial_points(zero(T), -inv(T(10)), n))
+
+
+dihedral_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(zero(T), zero(T), n),
+    equatorial_points(zero(T), +inv(T(10)), n),
+    equatorial_points(zero(T), -inv(T(10)), n),
+    equatorial_points(+inv(T(5)), +inv(T(10)), n),
+    equatorial_points(-inv(T(5)), -inv(T(10)), n))
+
+
+prismatic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(zero(T), zero(T), n),
+    equatorial_points(zero(T), +inv(T(10)), n),
+    equatorial_points(zero(T), -inv(T(10)), n),
+    equatorial_points(+inv(T(5)), zero(T), n),
+    equatorial_points(-inv(T(5)), zero(T), n))
+
+
+antiprismatic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
+    equatorial_points(zero(T), zero(T), n),
+    equatorial_points(zero(T), +inv(T(10)), n),
+    equatorial_points(zero(T), -inv(T(10)), n),
+    equatorial_points(+inv(T(5)), zero(T), n),
+    equatorial_points(zero(T), inv(T(2)), n),
+    equatorial_points(zero(T), T(2)/T(5), n),
+    equatorial_points(zero(T), T(3)/T(5), n),
+    equatorial_points(-inv(T(5)), inv(T(2)), n))
+
+
 ################################################################################
 
 end # module PointGroups
