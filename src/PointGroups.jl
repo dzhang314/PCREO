@@ -64,6 +64,57 @@ function rotoreflection_matrix_z(::Type{T}, i::Int, n::Int) where {T}
 end
 
 
+function rotation_matrix_to_x(v::SVector{3,T}) where {T}
+    _one = one(T)
+    x, y, z = v
+    if signbit(x)
+        x, y, z = -x, -y, -z
+    end
+    xp1 = x + _one
+    y2 = y * y
+    yz = y * z
+    z2 = z * z
+    return SArray{Tuple{3,3},T,2,9}(
+        x, -y, -z,
+        y, _one - y2 / xp1, -yz / xp1,
+        z, -yz / xp1, _one - z2 / xp1)
+end
+
+
+function rotation_matrix_to_y(v::SVector{3,T}) where {T}
+    _one = one(T)
+    x, y, z = v
+    if signbit(y)
+        x, y, z = -x, -y, -z
+    end
+    yp1 = y + _one
+    x2 = x * x
+    xz = x * z
+    z2 = z * z
+    return SArray{Tuple{3,3},T,2,9}(
+        _one - x2 / yp1, x, -xz / yp1,
+        -x, y, -z,
+        -xz / yp1, z, _one - z2 / yp1)
+end
+
+
+function rotation_matrix_to_z(v::SVector{3,T}) where {T}
+    _one = one(T)
+    x, y, z = v
+    if signbit(z)
+        x, y, z = -x, -y, -z
+    end
+    zp1 = z + _one
+    x2 = x * x
+    xy = x * y
+    y2 = y * y
+    return SArray{Tuple{3,3},T,2,9}(
+        _one - x2 / zp1, -xy / zp1, x,
+        -xy / zp1, _one - y2 / zp1, y,
+        -x, -y, z)
+end
+
+
 function rotation_matrix_x_pi(::Type{T}) where {T}
     _zero = zero(T)
     _one = one(T)
@@ -796,7 +847,21 @@ function isometries(
 end
 
 
+isometries(points::Vector{SVector{3,T}}, epsilon) where {T} =
+    isometries(points, points, epsilon)
+
+
 ##################################################### POINT GROUP IDENTIFICATION
+
+
+@enum MatrixType begin
+    IdentityMatrix
+    PureInversion
+    PureRotation # 180-degree rotation
+    PureReflection
+    GeneralRotation
+    GeneralRotoinversion
+end
 
 
 function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
@@ -806,8 +871,13 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
     @assert dist <= epsilon
     @assert (n, n) == size(mul_table)
 
+    identity_matrix = one(SArray{Tuple{3,3},T,2,9})
+    if n == 1
+        return ("C_1", identity_matrix)
+    end
+
     id_dist, id = minimum(
-        (inf_norm(mat - one(mat)), i)
+        (inf_norm(mat - identity_matrix), i)
         for (i, mat) in enumerate(group))
     @assert id_dist <= epsilon
     @assert issorted(view(mul_table, id, :))
@@ -829,108 +899,152 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
     max_order = maximum(order_table)
     is_cyclic = (max_order == n)
 
-    is_chiral = true
-    has_inversion = false
-    has_pure_reflection = false
-    has_max_order_negative_element = false
-
     _zero = zero(T)
     _one = one(T)
     two = _one + _one
+    matrix_types = Vector{MatrixType}(undef, n)
     axes = zeros(SVector{3,T}, n)
 
     for (i, mat) in enumerate(group)
         u, s, v = @suppress svd(mat - one(mat); full=true)
-        if inf_norm(s - [_zero, _zero, _zero]) <= epsilon # identity
-            @assert !signbit(det(mat))
+        if inf_norm(s - [_zero, _zero, _zero]) <= epsilon
             @assert id == i
-        elseif inf_norm(s - [two, two, two]) <= epsilon # pure inversion
-            @assert signbit(det(mat))
-            is_chiral = false
-            if order_table[i] == max_order
-                has_max_order_negative_element = true
-            end
-            @assert !has_inversion
-            has_inversion = true
-        elseif inf_norm(s - [two, two, _zero]) <= epsilon # 180-deg. rotation
             @assert !signbit(det(mat))
-            axes[i] = v[:,3]
-        elseif inf_norm(s - [two, _zero, _zero]) <= epsilon # pure reflection
+            matrix_types[i] = IdentityMatrix
+        elseif inf_norm(s - [two, two, two]) <= epsilon
             @assert signbit(det(mat))
-            is_chiral = false
-            if order_table[i] == max_order
-                has_max_order_negative_element = true
-            end
-            has_pure_reflection = true
+            matrix_types[i] = PureInversion
+        elseif inf_norm(s - [two, two, _zero]) <= epsilon
+            @assert !signbit(det(mat))
+            matrix_types[i] = PureRotation
+            axes[i] = v[:,3]
+        elseif inf_norm(s - [two, _zero, _zero]) <= epsilon
+            @assert signbit(det(mat))
+            matrix_types[i] = PureReflection
             axes[i] = v[:,1]
-        elseif abs(s[1] - s[2]) <= epsilon # general rotation
+        elseif abs(s[1] - s[2]) <= epsilon
             @assert !signbit(det(mat))
             @assert s[3] <= epsilon
+            matrix_types[i] = GeneralRotation
             axes[i] = v[:,3]
-        else # general rotoinversion
+        else
             @assert signbit(det(mat))
-            is_chiral = false
-            if order_table[i] == max_order
-                has_max_order_negative_element = true
-            end
             @assert abs(s[1] - two) <= epsilon
             @assert abs(s[2] - s[3]) <= epsilon
+            matrix_types[i] = GeneralRotoinversion
             axes[i] = v[:,1]
         end
     end
 
-    if n == 1
-        return "C_1"
+    has_inversion = (PureInversion in matrix_types)
+    has_pure_reflection = (PureReflection in matrix_types)
+    is_chiral = (!has_inversion && !has_pure_reflection
+                                && !(GeneralRotoinversion in matrix_types))
+
+    principal_axes = [axes[i]
+        for i = 1 : n
+        if order_table[i] == max_order && (
+            matrix_types[i] == PureRotation ||
+            matrix_types[i] == GeneralRotation ||
+            matrix_types[i] == GeneralRotoinversion)]
+    if isempty(principal_axes)
+        principal_axis = zero(SVector{3,T})
+        axis_rotation_matrix = identity_matrix
+    else
+        principal_axis = first(principal_axes)
+        axis_rotation_matrix = rotation_matrix_to_z(principal_axis)
     end
 
     if n == 2
         if is_chiral
-            return "C_2"
+            return ("C_2", axis_rotation_matrix)
+        elseif PureInversion in matrix_types
+            return ("C_i", identity_matrix)
         else
-            return has_inversion ? "C_i" : "C_s"
+            return ("C_s", rotation_matrix_to_z(axes[3 - id]))
         end
+    end
+
+    orthogonal_rotation_indices = [i
+        for i = 1 : n
+        if (matrix_types[i] == PureRotation &&
+            abs(principal_axis' * axes[i]) <= epsilon)]
+    if !isempty(orthogonal_rotation_indices)
+        orthogonal_axis =
+            axis_rotation_matrix * axes[first(orthogonal_rotation_indices)]
+        @assert abs(orthogonal_axis[3]) <= epsilon
+        axis_rotation_matrix =
+            rotation_matrix_to_x(orthogonal_axis) * axis_rotation_matrix
+    end
+
+    orthogonal_reflection_indices = [i
+        for i = 1 : n
+        if (matrix_types[i] == PureReflection &&
+            abs(principal_axis' * axes[i]) <= epsilon)]
+    if !isempty(orthogonal_reflection_indices)
+        secondary_axis =
+            axis_rotation_matrix * axes[first(orthogonal_reflection_indices)]
+        @assert abs(secondary_axis[3]) <= epsilon
+        secondary_rotation_matrix =
+            rotation_matrix_to_y(secondary_axis) * axis_rotation_matrix
     end
 
     if n == 4
         if is_cyclic
-            return is_chiral ? "C_4" : "S_4"
+            return (is_chiral ? "C_4" : "S_4", axis_rotation_matrix)
         elseif is_chiral
-            return "D_2"
+            return ("D_2", axis_rotation_matrix)
+        elseif has_inversion
+            return ("C_2h", axis_rotation_matrix)
         else
-            return has_inversion ? "C_2h" : "C_2v"
+            return ("C_2v", secondary_rotation_matrix)
         end
     end
 
+    has_max_order_negative_element = any(
+        order_table[i] == max_order && (
+            matrix_types[i] == PureInversion ||
+            matrix_types[i] == PureReflection ||
+            matrix_types[i] == GeneralRotoinversion)
+        for i = 1 : n)
+
     if n == 8
         if is_cyclic
-            return is_chiral ? "C_8" : "S_8"
+            return (is_chiral ? "C_8" : "S_8", axis_rotation_matrix)
         elseif is_chiral
-            return "D_4"
+            return ("D_4", axis_rotation_matrix)
         elseif is_abelian
-            return (max_order == 2) ? "D_2h" : "C_4h"
+            if max_order == 2
+                return ("D_2h", axis_rotation_matrix)
+            else
+                @assert max_order == 4
+                return ("C_4h", axis_rotation_matrix)
+            end
+        elseif has_max_order_negative_element
+            return ("D_2d", secondary_rotation_matrix)
         else
-            return has_max_order_negative_element ? "D_2d" : "C_4v"
+            return ("C_4v", secondary_rotation_matrix)
         end
     end
 
     if is_cyclic
         @assert is_abelian
         if is_chiral
-            return "C_$n"
-        elseif has_pure_reflection
+            return ("C_$n", axis_rotation_matrix)
+        elseif PureReflection in matrix_types
             @assert iseven(n)
             @assert isodd(n >> 1)
-            return "C_$(n >> 1)h"
+            return ("C_$(n >> 1)h", axis_rotation_matrix)
         else
             @assert iseven(n)
-            return "S_$n"
+            return ("S_$n", axis_rotation_matrix)
         end
     end
 
     if is_abelian
         @assert iseven(n)
         @assert iseven(n >> 1)
-        return "C_$(n >> 1)h"
+        return ("C_$(n >> 1)h", axis_rotation_matrix)
     end
 
     is_axial = (max_order >= 3) && all(
@@ -942,32 +1056,37 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
     if is_axial
         @assert iseven(n)
         if is_chiral
-            return "D_$(n >> 1)"
+            return ("D_$(n >> 1)", axis_rotation_matrix)
         elseif !has_max_order_negative_element
-            return "C_$(n >> 1)v"
+            refl_index = first(i for i = 1 : n
+                               if matrix_types[i] == PureReflection)
+            refl_axis = axis_rotation_matrix * axes[refl_index]
+            return ("C_$(n >> 1)v",
+                    rotation_matrix_to_y(refl_axis) * axis_rotation_matrix)
         else
             @assert iseven(n >> 1)
-            if xor(iseven(n >> 2), has_inversion)
-                return "D_$(n >> 2)d"
+            if xor(iseven(n >> 2), PureInversion in matrix_types)
+                return ("D_$(n >> 2)d", secondary_rotation_matrix)
             else
-                return "D_$(n >> 2)h"
+                return ("D_$(n >> 2)h", axis_rotation_matrix)
             end
         end
     else
         if n == 12
-            return "T"
+            return ("T", axis_rotation_matrix)
         elseif n == 48
-            return "O_h"
+            return ("O_h", axis_rotation_matrix)
         elseif n == 60
-            return "I"
+            return ("I", axis_rotation_matrix)
         elseif n == 120
-            return "I_h"
+            return ("I_h", axis_rotation_matrix)
         else
             @assert n == 24
             if is_chiral
-                return "O"
+                return ("O", axis_rotation_matrix)
             else
-                return has_inversion ? "T_h" : "T_d"
+                return (PureInversion in matrix_types ? "T_h" : "T_d",
+                        axis_rotation_matrix)
             end
         end
     end
