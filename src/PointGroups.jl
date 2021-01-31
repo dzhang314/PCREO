@@ -36,12 +36,10 @@ function rotation_matrix_z(::Type{T}, i::Int, n::Int) where {T}
             _zero, -_one, _zero,
             _zero, _zero, +_one)
     end
-    setprecision(BigFloat, 2200) do
-        c = T(cospi(BigFloat(2*i) / BigFloat(n)))
-        s = T(sinpi(BigFloat(2*i) / BigFloat(n)))
-        return SArray{Tuple{3,3},T,2,9}(
-            c, s, _zero, -s, c, _zero, _zero, _zero, _one)
-    end
+    c = cospi(T(2*i) / T(n))
+    s = sinpi(T(2*i) / T(n))
+    return SArray{Tuple{3,3},T,2,9}(
+        c, s, _zero, -s, c, _zero, _zero, _zero, _one)
 end
 
 
@@ -59,12 +57,10 @@ function rotoreflection_matrix_z(::Type{T}, i::Int, n::Int) where {T}
             _zero, -_one, _zero,
             _zero, _zero, -_one)
     end
-    setprecision(BigFloat, 2200) do
-        c = T(cospi(BigFloat(2*i) / BigFloat(n)))
-        s = T(sinpi(BigFloat(2*i) / BigFloat(n)))
-        return SArray{Tuple{3,3},T,2,9}(
-            c, s, _zero, -s, c, _zero, _zero, _zero, -_one)
-    end
+    c = cospi(T(2*i) / T(n))
+    s = sinpi(T(2*i) / T(n))
+    return SArray{Tuple{3,3},T,2,9}(
+        c, s, _zero, -s, c, _zero, _zero, _zero, -_one)
 end
 
 
@@ -800,7 +796,7 @@ function isometries(
 end
 
 
-################################################################################
+##################################################### POINT GROUP IDENTIFICATION
 
 
 function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
