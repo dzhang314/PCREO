@@ -14,7 +14,7 @@ export cyclic_group, rotoreflection_group, pinwheel_group, pyramid_group,
     tetrahedron_rotoinversion_centers, pyritohedron_vertices,
     octahedron_vertices, octahedron_edge_centers, octahedron_face_centers,
     icosahedron_vertices, icosahedron_edge_centers, icosahedron_face_centers,
-    POLYHEDRAL_POINT_GROUPS,
+    CHIRAL_POLYHEDRAL_POINT_GROUPS, POLYHEDRAL_POINT_GROUPS,
     multiplication_table, count_central_elements, degenerate_orbits,
     isometric, isometries, identify_point_group
 
@@ -593,6 +593,16 @@ function icosahedron_face_centers(::Type{T}) where {T}
         V(-irt3, -irt3, -irt3),
     ]
 end
+
+
+const CHIRAL_POLYHEDRAL_POINT_GROUPS = [
+    (chiral_tetrahedral_group, [tetrahedron_vertices,
+        tetrahedron_edge_centers, tetrahedron_face_centers]),
+    (chiral_octahedral_group, [octahedron_vertices,
+        octahedron_edge_centers, octahedron_face_centers]),
+    (chiral_icosahedral_group, [icosahedron_vertices,
+        icosahedron_edge_centers, icosahedron_face_centers]),
+]
 
 
 const POLYHEDRAL_POINT_GROUPS = [
