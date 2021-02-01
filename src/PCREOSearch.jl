@@ -146,6 +146,11 @@ function generate_and_save_point_configuration(num_points::Int)
             joinpath(PCREO_OUTPUT_DIRECTORY,
                 "PCREO-03-$(lpad(num_points, 8, '0'))-$(uuid4()).csv"),
             to_point_vector(points3), initial_points)
+        if isnothing(filename)
+            println("Failed to generate stable point configuration.")
+        else
+            println("Saved $num_points-point configuration to $filename.")
+        end
     catch e
         if e isa AssertionError
             println(e)
@@ -158,11 +163,6 @@ function generate_and_save_point_configuration(num_points::Int)
         else
             rethrow(e)
         end
-    end
-    if isnothing(filename)
-        println("Failed to generate stable point configuration.")
-    else
-        println("Saved $num_points-point configuration to $filename.")
     end
 end
 
@@ -210,6 +210,11 @@ function generate_and_save_symmetric_point_configuration(
             joinpath(PCREO_OUTPUT_DIRECTORY,
                 "PCREO-03-$(lpad(num_full_points, 8, '0'))-$(uuid4()).csv"),
             to_point_vector(full_points), initial_points)
+        if isnothing(filename)
+            println("Failed to generate stable point configuration.")
+        else
+            println("Saved $num_full_points-point configuration to $filename.")
+        end
     catch e
         if e isa AssertionError
             println(e)
@@ -225,12 +230,6 @@ function generate_and_save_symmetric_point_configuration(
             rethrow(e)
         end
     end
-
-    if isnothing(filename)
-        println("Failed to generate stable point configuration.")
-    else
-        println("Saved $num_full_points-point configuration to $filename.")
-    end
 end
 
 
@@ -240,11 +239,11 @@ function main()
             for selected_orbits in powerset(orbit_functions)
                 for num_points = 1 : 99
                     generate_and_save_symmetric_point_configuration(
-                        group_function, selected_orbits, num_points, 999)
+                        group_function, selected_orbits, num_points, 499)
                 end
             end
         end
-        for num_points = 4 : 999
+        for num_points = 4 : 499
             generate_and_save_point_configuration(num_points)
         end
     end
