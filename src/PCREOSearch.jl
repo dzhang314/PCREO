@@ -1,6 +1,6 @@
 using DZOptimization: BFGSOptimizer, LBFGSOptimizer, step!
 using DZOptimization.ExampleFunctions: riesz_energy
-using LinearAlgebra: eigvals!
+using LinearAlgebra: BLAS, eigvals!
 using MultiFloats: Float64x2, Float64x3
 using Printf: @printf, @sprintf
 using StaticArrays: SVector, norm
@@ -9,6 +9,8 @@ using UUIDs: uuid4
 push!(LOAD_PATH, @__DIR__)
 using PCREO
 using PointGroups
+
+BLAS.set_num_threads(1)
 
 
 function to_point_vector(points::AbstractMatrix{T}) where {T}
@@ -98,7 +100,7 @@ function save_point_configuration!(filename::String,
 
     facets = convex_hull_facets(points)
     packing_rad = packing_radius(points, facets)
-    covering_rad = covering_radius(points, facets, 2^-60)
+    covering_rad = covering_radius(points, facets)
 
     open(filename, "w+") do io
         println(io, dimension)
@@ -139,10 +141,24 @@ function generate_and_save_point_configuration(num_points::Int)
     points1, energy1 = refine(initial_points)
     points2, energy2 = refine(Float64x2.(points1))
     points3, energy3 = refine(Float64x3.(points2))
-    filename = save_point_configuration!(
-        joinpath(PCREO_OUTPUT_DIRECTORY,
-            "PCREO-03-$(lpad(num_points, 8, '0'))-$(uuid4()).csv"),
-        to_point_vector(points3), initial_points)
+    try
+        filename = save_point_configuration!(
+            joinpath(PCREO_OUTPUT_DIRECTORY,
+                "PCREO-03-$(lpad(num_points, 8, '0'))-$(uuid4()).csv"),
+            to_point_vector(points3), initial_points)
+    catch e
+        if e isa AssertionError
+            println(e)
+            filename = "FAIL-03-$(lpad(num_points, 8, '0'))-$(uuid4()).csv"
+            open(filename, "w+") do io
+                for point in eachcol(initial_points)
+                    println(io, join(string.(point), ", "))
+                end
+            end
+        else
+            rethrow(e)
+        end
+    end
     if isnothing(filename)
         println("Failed to generate stable point configuration.")
     else
@@ -189,10 +205,27 @@ function generate_and_save_symmetric_point_configuration(
     end
     @assert k == num_full_points
 
-    filename = save_point_configuration!(
-        joinpath(PCREO_OUTPUT_DIRECTORY,
-            "PCREO-03-$(lpad(num_full_points, 8, '0'))-$(uuid4()).csv"),
-        to_point_vector(full_points), initial_points)
+    try
+        filename = save_point_configuration!(
+            joinpath(PCREO_OUTPUT_DIRECTORY,
+                "PCREO-03-$(lpad(num_full_points, 8, '0'))-$(uuid4()).csv"),
+            to_point_vector(full_points), initial_points)
+    catch e
+        if e isa AssertionError
+            println(e)
+            filename = "FAIL-03-$(lpad(num_full_points, 8, '0'))-$(uuid4()).csv"
+            open(filename, "w+") do io
+                println(io, group)
+                println(io, orbits)
+                for point in eachcol(initial_points)
+                    println(io, join(string.(point), ", "))
+                end
+            end
+        else
+            rethrow(e)
+        end
+    end
+
     if isnothing(filename)
         println("Failed to generate stable point configuration.")
     else
