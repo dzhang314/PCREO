@@ -154,7 +154,8 @@ function generate_and_save_point_configuration(num_points::Int)
     catch e
         if e isa AssertionError
             println(e)
-            filename = "FAIL-03-$(lpad(num_points, 8, '0'))-$(uuid4()).csv"
+            filename = joinpath(PCREO_OUTPUT_DIRECTORY,
+                "FAIL-03-$(lpad(num_points, 8, '0'))-$(uuid4()).csv")
             open(filename, "w+") do io
                 for point in eachcol(initial_points)
                     println(io, join(string.(point), ", "))
@@ -218,7 +219,8 @@ function generate_and_save_symmetric_point_configuration(
     catch e
         if e isa AssertionError
             println(e)
-            filename = "FAIL-03-$(lpad(num_full_points, 8, '0'))-$(uuid4()).csv"
+            filename = joinpath(PCREO_OUTPUT_DIRECTORY,
+                "FAIL-03-$(lpad(num_full_points, 8, '0'))-$(uuid4()).csv")
             open(filename, "w+") do io
                 println(io, group)
                 println(io, orbits)
