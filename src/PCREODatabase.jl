@@ -1,90 +1,63 @@
-using NearestNeighbors: KDTree
+using MultiFloats: Float64x3
+using StaticArrays: SVector
+using UUIDs: UUID
 
 push!(LOAD_PATH, @__DIR__)
 using PCREO
+using PointGroups
 
 
-function isometric(a::PCREORecord, b::PCREORecord)
-    if (a.dimension != b.dimension) || (a.num_points != b.num_points)
-        return false
-    end
-    if !isapprox(a.energy, b.energy; rtol=1.0e-14)
-        return false
-    end
-    identical_facets = (sort!(length.(a.facets)) == sort!(length.(b.facets)))
-    # if !all(isapprox.(first.(middle.(a_buckets)),
-    #                   first.(middle.(b_buckets)); rtol=1.0e-14))
-    #     return false
-    # end
-    b_tree = KDTree(b.points)
-    dist = minimum(matching_distance(mat * a.points, b_tree)
-                   for mat in candidate_isometries(a.points, b.points))
-    if dist < 1.0e-10
-        if !identical_facets
-            println("WARNING: Found isometric point configurations" *
-                    " with different facets.")
-        end
-        return true
-    end
-    return false
+const UUID_REGEX = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" *
+                         "[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+
+function to_point_vector(points::AbstractMatrix{T}) where {T}
+    dimension, num_points = size(points)
+    @assert dimension == 3
+    return [SVector{3,T}(view(points, :, i)) for i = 1 : num_points]
 end
 
 
-function add_to_database(dataname)
-    prefix = dataname[1:13]
-    datapath = joinpath(PCREO_OUTPUT_DIRECTORY, dataname)
-    data = PCREORecord(datapath)
-    for dirname in filter(startswith(prefix), readdir(PCREO_DATABASE_DIRECTORY))
-        dirpath = joinpath(PCREO_DATABASE_DIRECTORY, dirname)
-        @assert isdir(dirpath)
-        reppath = joinpath(dirpath, dirname * ".csv")
-        @assert isfile(reppath)
-        representative = PCREORecord(reppath)
-        if isometric(data, representative)
-            mv(datapath, joinpath(dirpath, dataname))
-            return dirname
+function add_to_database!(filepath::String)
+    filename = basename(filepath)
+    uuid = UUID(match(UUID_REGEX, filename).match)
+    record = PCREORecord(filepath)
+    dim_str = lpad(record.dimension, 2, '0')
+    num_str = lpad(record.num_points, 8, '0')
+    num_dir = joinpath(PCREO_DATABASE_DIRECTORY, num_str)
+    if !isdir(num_dir)
+        mkdir(num_dir)
+    end
+    for entry_name in readdir(num_dir)
+        entry_dir = joinpath(num_dir, entry_name)
+        reference_name = "PCREO-$dim_str-$num_str-$entry_name.csv"
+        reference = PCREORecord(joinpath(entry_dir, reference_name))
+        if isapprox(record.energy, reference.energy;
+                    rtol=Float64x3(2^-80))
+            if isometric(to_point_vector(record.points),
+                         to_point_vector(reference.points), 2^-40)
+                mv(filepath, joinpath(entry_dir, filename))
+                return joinpath(entry_dir, filename)
+            end
         end
     end
-    newdirname = dataname[1:end-4]
-    newdirpath = joinpath(PCREO_DATABASE_DIRECTORY, newdirname)
-    mkdir(newdirpath)
-    mv(datapath, joinpath(newdirpath, dataname))
-    return newdirname
+    new_dir = joinpath(num_dir, string(uuid))
+    mkdir(new_dir)
+    mv(filepath, joinpath(new_dir, filename))
+    return joinpath(new_dir, filename)
 end
 
 
 function main()
-
-    min_n = parse(Int, ARGS[1])
-    max_n = parse(Int, ARGS[2])
-
     while true
-        remaining = filter(startswith("PCREO"), readdir(PCREO_OUTPUT_DIRECTORY))
-        if !isempty(remaining)
-            name = rand(remaining)
-            num_particles = parse(Int, name[10:13])
-            if min_n <= num_particles <= max_n
-                print(length(remaining), '\t', name, " => ")
-                flush(stdout)
-                try
-                    found = add_to_database(name)
-                    if occursin(found, name)
-                        println("new")
-                    else
-                        println(found)
-                    end
-                catch e
-                    if e isa AssertionError
-                        println("ERROR: ", e)
-                    else
-                        rethrow(e)
-                    end
-                end
-                flush(stdout)
-            end
+        filenames = filter(startswith("PCREO-"),
+                           readdir("D:\\Data\\PCREOOutput"))
+        if length(filenames) > 0
+            src = joinpath("D:\\Data\\PCREOOutput", rand(filenames))
+            dst = add_to_database!(src)
+            println(src, " => ", dst)
         end
     end
-
 end
 
 

@@ -8,35 +8,30 @@ using DZOptimization: half, normalize_columns!, step!
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, riesz_hessian!,
     constrain_riesz_gradient_sphere!, constrain_riesz_hessian_sphere!
+using MultiFloats: Float64x2, Float64x3
 using StaticArrays: SArray, SVector, cross, norm
 
 # using DZOptimization: dot, half, normalize!,
 #     unsafe_sqrt
 
-export PCREO_OUTPUT_DIRECTORY, constrain_sphere!, spherical_riesz_gradient!,
+export PCREO_OUTPUT_DIRECTORY, PCREO_DATABASE_DIRECTORY,
+    constrain_sphere!, spherical_riesz_gradient!,
     spherical_riesz_gradient, spherical_riesz_hessian,
     run!, convex_hull_facets, adjacency_structure,
     packing_radius, covering_radius, symmetrize!, parallel_facet_distance,
+    PCREORecord,
     symmetrized_riesz_energy, symmetrized_riesz_gradient!,
     symmetrized_riesz_functors
 
 # export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
-#     PCREO_OUTPUT_DIRECTORY, PCREO_DATABASE_DIRECTORY,
+#     PCREO_DATABASE_DIRECTORY,
 #     PCREO_GRAPH_DIRECTORY, PCREO_FACET_ERROR_DIRECTORY,
-#     riesz_energy, constrain_sphere!,
-#     spherical_riesz_gradient!, spherical_riesz_gradient,
-#     spherical_riesz_hessian, run!, spherical_riesz_gradient_norm,
-#     spherical_riesz_hessian_spectral_gap,
-#     convex_hull_facets, facet_normal_vector, parallel_facet_distance,
-#     PCREORecord,
-#     positive_transformation_matrix, negative_transformation_matrix,
-#     candidate_isometries, matching_distance,
-#     dict_push!, dict_incr!,
+#     facet_normal_vector, dict_push!, dict_incr!,
 #     incidence_degrees, connected_components,
 #     defect_graph, defect_classes, unicode_defect_string, html_defect_string,
 
 
-# ########################################################### FILE NAMES AND PATHS
+########################################################### FILE NAMES AND PATHS
 
 
 # const PCREO_DIRNAME_REGEX = Regex(
@@ -53,7 +48,7 @@ else
     const PCREO_OUTPUT_DIRECTORY = "/home/dkzhang/pcreo-output"
 end
 
-# const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
+const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
 
 # const PCREO_GRAPH_DIRECTORY = "D:\\Data\\PCREOGraphs"
 
@@ -65,7 +60,7 @@ else
     const QCONVEX_PATH = "qconvex"
 end
 
-# ######################################################## RIESZ ENERGY ON SPHERES
+######################################################## RIESZ ENERGY ON SPHERES
 
 
 function constrain_sphere!(points)
@@ -324,50 +319,82 @@ function parallel_facet_distance(points::Vector{SVector{3,T}},
 end
 
 
-# ################################################################### LOADING DATA
+################################################################### LOADING DATA
 
 
-# struct PCREORecord
-#     dimension::Int
-#     num_points::Int
-#     energy::Float64
-#     points::Matrix{Float64}
-#     facets::Vector{Vector{Int}}
-#     initial::Matrix{Float64}
-# end
+struct PCREORecord
+    dimension::Int
+    num_points::Int
+    symmetry_group::String
+    energy::Float64x3
+    first_eigenvalue::Float64
+    packing_radius::Float64x2
+    covering_radius::Float64x2
+    num_gradient_bits::Float64
+    num_hessian_bits::Float64
+    facet_distance::Float64x2
+    points::Matrix{Float64x2}
+    facets::Vector{Vector{Int}}
+    initial_points::Matrix{Float64}
+end
 
 
-# function PCREORecord(path::AbstractString)
-#     if occursin(PCREO_DIRNAME_REGEX, path)
-#         path = joinpath(PCREO_DATABASE_DIRECTORY, path, path * ".csv")
-#     end
-#     filename = basename(path)
-#     m = match(PCREO_FILENAME_REGEX, filename)
-#     @assert !isnothing(m)
-#     dimension = parse(Int, m[1])
-#     num_points = parse(Int, m[2])
-#     uuid = m[3]
-#     data = split(read(path, String), "\n\n")
-#     @assert length(data) == 4
-#     header = split(data[1])
-#     @assert length(header) == 3
-#     @assert dimension == parse(Int, header[1])
-#     @assert num_points == parse(Int, header[2])
-#     energy = parse(Float64, header[3])
-#     points = hcat([[parse(Float64, strip(entry))
-#                     for entry in split(line, ',')]
-#                    for line in split(strip(data[2]), '\n')]...)
-#     @assert (dimension, num_points) == size(points)
-#     facets = [[parse(Int, strip(entry))
-#                for entry in split(line, ',')]
-#               for line in split(strip(data[3]), '\n')]
-#     initial = hcat([[parse(Float64, strip(entry))
-#                      for entry in split(line, ',')]
-#                     for line in split(strip(data[4]), '\n')]...)
-#     @assert (dimension, num_points) == size(initial)
-#     return PCREORecord(dimension, num_points, energy,
-#                        points, facets, initial)
-# end
+function PCREORecord(filepath::String)
+    entries = split(read(filepath, String), "\n\n")
+    @assert 4 <= length(entries) <= 5
+
+    geometric_properties = split(entries[1], '\n')
+    @assert length(geometric_properties) == 7
+
+    convergence_measures = split(entries[2], '\n')
+    @assert length(convergence_measures) == 3
+
+    dimension = parse(Int, geometric_properties[1])
+    @assert dimension == 3
+    num_points = parse(Int, geometric_properties[2])
+    symmetry_group = geometric_properties[3]
+    if startswith(symmetry_group, '"') && endswith(symmetry_group, '"')
+        symmetry_group = symmetry_group[2:end-1]
+    end
+    energy = Float64x3(geometric_properties[4])
+    first_eigenvalue = parse(Float64, geometric_properties[5])
+    packing_radius = Float64x2(geometric_properties[6])
+    covering_radius = Float64x2(geometric_properties[7])
+
+    num_gradient_bits = parse(Float64, convergence_measures[1])
+    num_hessian_bits = parse(Float64, convergence_measures[2])
+    facet_distance = Float64x2(convergence_measures[3])
+
+    points = reshape([
+        Float64x2(strip(entry))
+        for line in split(entries[3], '\n')
+        for entry in split(line, ',')
+        if !isempty(strip(line))],
+        dimension, num_points)
+
+    facets = [
+        [parse(Int, strip(entry))
+         for entry in split(line, ',')]
+        for line in split(entries[4], '\n')
+        if !isempty(strip(line))]
+
+    if length(entries) >= 5
+        initial_points = reshape([
+            parse(Float64, strip(entry))
+            for line in split(entries[5], '\n')
+            for entry in split(line, ',')
+            if !isempty(strip(line))],
+            dimension, :)
+    else
+        initial_points = Matrix{Float64}(undef, dimension, 0)
+    end
+
+    return PCREORecord(dimension, num_points, symmetry_group,
+        energy, first_eigenvalue,
+        packing_radius, covering_radius,
+        num_gradient_bits, num_hessian_bits, facet_distance,
+        points, facets, initial_points)
+end
 
 
 # ############################################################ TOPOLOGICAL DEFECTS
