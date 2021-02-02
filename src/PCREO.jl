@@ -47,7 +47,11 @@ export PCREO_OUTPUT_DIRECTORY, constrain_sphere!, spherical_riesz_gradient!,
 #     "^PCREO-([0-9]{2})-([0-9]{4})-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" *
 #     "[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\\.csv\$")
 
-const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREOOutput"
+@static if Sys.iswindows()
+    const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREOOutput"
+else
+    const PCREO_OUTPUT_DIRECTORY = "/home/dkzhang/pcreo-output"
+end
 
 # const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
 
@@ -55,8 +59,11 @@ const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREOOutput"
 
 # const PCREO_FACET_ERROR_DIRECTORY = "D:\\Data\\PCREOFacetErrors"
 
-const QCONVEX_PATH = "C:\\Programs\\qhull-2020.2\\bin\\qconvex.exe"
-
+@static if Sys.iswindows()
+    const QCONVEX_PATH = "C:\\Programs\\qhull-2020.2\\bin\\qconvex.exe"
+else
+    const QCONVEX_PATH = "qconvex"
+end
 
 # ######################################################## RIESZ ENERGY ON SPHERES
 
@@ -118,34 +125,43 @@ end
 
 
 function convex_hull_facets(points::Vector{SVector{N,T}}) where {T,N}
-    buffer = IOBuffer()
-    process = open(`$QCONVEX_PATH i`, buffer, write=true)
-    println(process, N)
-    println(process, length(points))
-    for point in points
-        for coord in point
-            print(process, ' ', Float64(coord))
+    @assert length(points) >= 4
+    num_retries = 0
+    while true
+        buffer = IOBuffer()
+        process = open(`$QCONVEX_PATH i`, buffer, write=true)
+        println(process, N)
+        println(process, length(points))
+        for point in points
+            for coord in point
+                print(process, ' ', Float64(coord))
+            end
+            println(process)
         end
-        println(process)
-    end
-    close(process)
-    while process_running(process)
-        sleep(0.001) # minimum allowed sleep time
-    end
-    first = true
-    num_facets = 0
-    result = Vector{Int}[]
-    seek(buffer, 0)
-    for line in eachline(buffer)
-        if first
-            num_facets = parse(Int, line)
-            first = false
+        close(process)
+        wait(process)
+        first = true
+        num_facets = 0
+        result = Vector{Int}[]
+        seek(buffer, 0)
+        for line in eachline(buffer)
+            if first
+                num_facets = parse(Int, line)
+                first = false
+            else
+                push!(result, [parse(Int, s) + 1 for s in split(line)])
+            end
+        end
+        if (num_facets > 0) && (num_facets == length(result))
+            return result
         else
-            push!(result, [parse(Int, s) + 1 for s in split(line)])
+            # Sometimes, qconvex doesn't work, and we need to try again.
+            num_retries += 1
+            if num_retries >= 10
+                error("qconvex failed to return a result after ten tries.")
+            end
         end
     end
-    @assert num_facets == length(result)
-    return result
 end
 
 
