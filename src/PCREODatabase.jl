@@ -48,17 +48,31 @@ function add_to_database!(filepath::String)
 end
 
 
-function main()
+function main(n_min::Int, n_max::Int)
     while true
-        filenames = filter(startswith("PCREO-"),
-                           readdir("D:\\Data\\PCREOOutput"))
+        filenames = filter(startswith("PCREO-03-"),
+                           readdir("D:\\Data\\PCREOCleaned"))
         if length(filenames) > 0
-            src = joinpath("D:\\Data\\PCREOOutput", rand(filenames))
-            dst = add_to_database!(src)
-            println(src, " => ", dst)
+            filename = rand(filenames)
+            num_points = parse(Int, filename[10:17])
+            if n_min <= num_points <= n_max
+                src = joinpath("D:\\Data\\PCREOCleaned", filename)
+                try
+                    dst = add_to_database!(src)
+                    println(src, " => ", dst)
+                catch e
+                    if e isa AssertionError
+                        println(filename, ": ", e)
+                    else
+                        rethrow(e)
+                    end
+                end
+            end
+        else
+            sleep(1.0)
         end
     end
 end
 
 
-main()
+main(parse(Int, ARGS[1]), parse(Int, ARGS[2]))
