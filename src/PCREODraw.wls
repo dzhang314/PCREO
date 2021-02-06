@@ -1,17 +1,21 @@
 #!/usr/bin/env wolframscript
+(* ::Package:: *)
 
 ImportPCREO[path_String] := With[
 	{data = SplitBy[Import[path], # === {}&]},
+	If[Length[data] =!= 7 && Length[data] =!= 9, Throw[path]];
 	{Flatten[data[[1]]], data[[3]], data[[5]], data[[7]]}
 ];
 
+ValenceColor[3] = Orange;
 ValenceColor[4] = Yellow;
 ValenceColor[5] = Red;
 ValenceColor[6] = Green;
 ValenceColor[7] = Blue;
+ValenceColor[8] = Purple;
 ValenceColor[_] = White;
 
-PlotPCREOPrimitives[{_, points_List, facets_List, _}] := Block[
+PlotPCREOPrimitives[points_List, facets_List] := Block[
 	{vertexColors, facetCenters, neighboringFacets, triangles, dist, dots},
 	vertexColors = ValenceColor /@ Lookup[
 		Counts[Join @@ facets], Range@Length[points], 0];
@@ -35,17 +39,24 @@ PlotPCREOPrimitives[{_, points_List, facets_List, _}] := Block[
 	Append[triangles, dots]
 ];
 
+PlotPCREOPrimitives[{_, _, points_List, facets_List}] := PlotPCREOPrimitives[points, facets];
+
+
 $DatabasePath = "D:\\Data\\PCREODatabase";
 $ImagePath = "D:\\Data\\PCREOImages";
-LaunchKernels[16];
+(* LaunchKernels[16]; *)
+
 
 Do[
 	If[!FileExistsQ[FileNameJoin[{$ImagePath, FileBaseName[dir] <> ".gif"}]],
 		Print["Loading data for ", FileBaseName[dir], "..."];
+(*
 		With[{selected = First@MinimalBy[
 			ImportPCREO /@ FileNames[All, dir],
-			Length[#[[3]]]&
+			Length[#[[4]]]&
 		]},
+*)
+		With[{selected = ImportPCREO@RandomChoice@FileNames[All, dir]},
 		Print["Rendering image for ", FileBaseName[dir], "..."];
 		With[{primitives = PlotPCREOPrimitives[selected]},
 		With[{frames = Table[
@@ -60,7 +71,9 @@ Do[
 			{t, N[2*Pi * Range[0, 199] / 200]}
 		]},
 		Export[
-			FileNameJoin[{$ImagePath, FileBaseName[dir] <> ".gif"}],
+			FileNameJoin[{$ImagePath,
+				"PCREO-03-" <> FileBaseName[numDir] <>
+				"-" <> FileBaseName[dir] <> ".gif"}],
 			ParallelMap[
 				Rasterize[#, Background -> None, ImageResolution -> 50]&,
 				frames, Method -> "FinestGrained"
@@ -69,5 +82,12 @@ Do[
 			"AnimationRepetitions" -> Infinity
 		]]]]
 	],
-	{dir, FileNames[All, $DatabasePath]}
+	{numDir, FileNames[All, $DatabasePath]},
+	{dir, FileNames[All, numDir]}
 ];
+
+
+
+
+
+

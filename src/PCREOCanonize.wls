@@ -5,7 +5,7 @@ ImportPCREO[path_String] := With[{
 	{Flatten[data[[1]]], data[[3]], data[[5]], data[[7]]}
 ];
 
-NNGraph[{_, _, facets_List, _}] := With[
+NNGraph[{_, _, _, facets_List}] := With[
 	{edges = Select[Intersection @@@ Subsets[facets, {2}],
 		GreaterThan[1]@*Length]},
 	If[!AllTrue[edges, EqualTo[2]@*Length], Throw[edges]];
@@ -22,8 +22,9 @@ $PCREOGraphDirectory = "D:\\Data\\PCREOGraphs";
 
 LaunchKernels[16];
 Do[
-	With[{outputFile = FileNameJoin[
-		{$PCREOGraphDirectory, FileBaseName[dir] <> ".g6"}
+	With[{outputFile = FileNameJoin[{$PCREOGraphDirectory,
+		"PCREO-03-" <> FileBaseName[numDir] <>
+		"-" <> FileBaseName[dir] <> ".g6"}
 	]},
 	If[!FileExistsQ[outputFile],
 		Print["Calculating graphs for ", FileBaseName[dir], "..."];
@@ -33,5 +34,6 @@ Do[
 		]},
 		Export[outputFile, StringJoin @@ Union[g6strings], "Text"]
 	]]],
-	{dir, FileNames[All, $PCREODatabaseDirectory]}
+	{numDir, FileNames[All, $PCREODatabaseDirectory]},
+	{dir, FileNames[All, numDir]}
 ];
