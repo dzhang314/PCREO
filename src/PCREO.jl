@@ -1,9 +1,5 @@
 module PCREO
 
-# using GenericLinearAlgebra
-# using LinearAlgebra: cross, det, eigvals!, svd
-# using NearestNeighbors: KDTree, knn
-
 using DZOptimization: half, normalize_columns!, step!
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, riesz_hessian!,
@@ -11,24 +7,15 @@ using DZOptimization.ExampleFunctions:
 using MultiFloats: Float64x2, Float64x3
 using StaticArrays: SArray, SVector, cross, norm
 
-# using DZOptimization: dot, half, normalize!,
-#     unsafe_sqrt
-
 export PCREO_OUTPUT_DIRECTORY, PCREO_DATABASE_DIRECTORY,
     constrain_sphere!, spherical_riesz_gradient!,
     spherical_riesz_gradient, spherical_riesz_hessian,
     run!, convex_hull_facets, adjacency_structure,
     packing_radius, covering_radius, symmetrize!, parallel_facet_distance,
     PCREORecord,
+    defect_graph, defect_classes, unicode_defect_string, html_defect_string,
     symmetrized_riesz_energy, symmetrized_riesz_gradient!,
     symmetrized_riesz_functors
-
-# export PCREO_DIRNAME_REGEX, PCREO_FILENAME_REGEX,
-#     PCREO_DATABASE_DIRECTORY,
-#     PCREO_GRAPH_DIRECTORY, PCREO_FACET_ERROR_DIRECTORY,
-#     facet_normal_vector, dict_push!, dict_incr!,
-#     incidence_degrees, connected_components,
-#     defect_graph, defect_classes, unicode_defect_string, html_defect_string,
 
 
 ########################################################### FILE NAMES AND PATHS
@@ -49,10 +36,6 @@ else
 end
 
 const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
-
-# const PCREO_GRAPH_DIRECTORY = "D:\\Data\\PCREOGraphs"
-
-# const PCREO_FACET_ERROR_DIRECTORY = "D:\\Data\\PCREOFacetErrors"
 
 @static if Sys.iswindows()
     const QCONVEX_PATH = "C:\\Programs\\qhull-2020.2\\bin\\qconvex.exe"
@@ -397,97 +380,124 @@ function PCREORecord(filepath::String)
 end
 
 
-# ############################################################ TOPOLOGICAL DEFECTS
+############################################################ TOPOLOGICAL DEFECTS
 
 
-# function defect_graph(facets::Vector{Vector{Int}})
-#     adjacent_vertices, _ = adjacency_structure(facets)
-#     adjacency_lists = Dict{Int,Vector{Int}}()
-#     for (v, w) in adjacent_vertices
-#         dict_push!(adjacency_lists, v, w)
-#         dict_push!(adjacency_lists, w, v)
-#     end
-#     degrees = Dict(v => length(l) for (v, l) in adjacency_lists)
-#     @assert degrees == incidence_degrees(facets)
-#     hexagonal_vertices = [v for (v, d) in degrees if d == 6]
-#     for k in hexagonal_vertices
-#         delete!(adjacency_lists, k)
-#         delete!(degrees, k)
-#     end
-#     for (v, l) in adjacency_lists
-#         deleteat!(adjacency_lists[v],
-#             [i for (i, w) in enumerate(l)
-#              if w in hexagonal_vertices])
-#     end
-#     return (adjacency_lists, degrees)
-# end
+function defect_graph(facets::Vector{Vector{Int}})
+    adjacent_vertices, _ = adjacency_structure(facets)
+    adjacency_lists = Dict{Int,Vector{Int}}()
+    for (v, w) in adjacent_vertices
+        dict_push!(adjacency_lists, v, w)
+        dict_push!(adjacency_lists, w, v)
+    end
+    degrees = Dict(v => length(l) for (v, l) in adjacency_lists)
+    @assert degrees == incidence_degrees(facets)
+    hexagonal_vertices = [v for (v, d) in degrees if d == 6]
+    for k in hexagonal_vertices
+        delete!(adjacency_lists, k)
+        delete!(degrees, k)
+    end
+    for (v, l) in adjacency_lists
+        deleteat!(adjacency_lists[v],
+            [i for (i, w) in enumerate(l)
+             if w in hexagonal_vertices])
+    end
+    return (adjacency_lists, degrees)
+end
 
 
-# function defect_classes(facets::Vector{Vector{Int}})
-#     adjacency_lists, defect_degrees = defect_graph(facets)
-#     defect_components = connected_components(adjacency_lists)
-#     defect_counts = Dict{Vector{Tuple{Int,Tuple{Int,Int}}},Int}()
-#     for component in defect_components
-#         shape_counts = Dict{Tuple{Int,Int},Int}()
-#         for v in component
-#             dict_incr!(shape_counts,
-#                 (length(adjacency_lists[v]), defect_degrees[v]))
-#         end
-#         shape_table = [(num, shape) for (shape, num) in shape_counts]
-#         sort!(shape_table; rev=true)
-#         dict_incr!(defect_counts, shape_table)
-#     end
-#     defect_table = [(num, defect) for (defect, num) in defect_counts]
-#     sort!(defect_table; rev=true)
-#     return defect_table
-# end
+function connected_components(adjacency_lists::Dict{V,Vector{V}}) where {V}
+    visited = Dict{V,Bool}()
+    for (v, l) in adjacency_lists
+        visited[v] = false
+    end
+    components = Vector{V}[]
+    for (v, l) in adjacency_lists
+        if !visited[v]
+            visited[v] = true
+            current_component = [v]
+            to_visit = copy(l)
+            while !isempty(to_visit)
+                w = pop!(to_visit)
+                if !visited[w]
+                    visited[w] = true
+                    push!(current_component, w)
+                    append!(to_visit, adjacency_lists[w])
+                end
+            end
+            push!(components, current_component)
+        end
+    end
+    @assert allunique(vcat(components...))
+    return components
+end
 
 
-# function shape_code(n::Int)
-#     if n == 3
-#         return 'T'
-#     elseif n == 4
-#         return 'S'
-#     elseif n == 5
-#         return 'P'
-#     elseif n == 6
-#         @assert n != 6
-#     elseif n == 7
-#         return 'H'
-#     elseif n == 8
-#         return 'O'
-#     elseif n == 9
-#         return 'N'
-#     elseif n == 10
-#         return 'D'
-#     elseif n == 11
-#         return 'U'
-#     else
-#         @assert false
-#     end
-# end
+function defect_classes(facets::Vector{Vector{Int}})
+    adjacency_lists, defect_degrees = defect_graph(facets)
+    defect_components = connected_components(adjacency_lists)
+    defect_counts = Dict{Vector{Tuple{Int,Tuple{Int,Int}}},Int}()
+    for component in defect_components
+        shape_counts = Dict{Tuple{Int,Int},Int}()
+        for v in component
+            dict_incr!(shape_counts,
+                (length(adjacency_lists[v]), defect_degrees[v]))
+        end
+        shape_table = [(num, shape) for (shape, num) in shape_counts]
+        sort!(shape_table; rev=true)
+        dict_incr!(defect_counts, shape_table)
+    end
+    defect_table = [(num, defect) for (defect, num) in defect_counts]
+    sort!(defect_table; rev=true)
+    return defect_table
+end
 
 
-# unicode_subscript_string(n::Int) = foldl(replace,
-#     map(Pair, Char.(0x30:0x39), Char.(0x2080:0x2089));
-#     init=string(n))
+function shape_code(n::Int)
+    if n == 3
+        return 'T'
+    elseif n == 4
+        return 'S'
+    elseif n == 5
+        return 'P'
+    elseif n == 6
+        @assert n != 6
+    elseif n == 7
+        return 'H'
+    elseif n == 8
+        return 'O'
+    elseif n == 9
+        return 'N'
+    elseif n == 10
+        return 'D'
+    elseif n == 11
+        return 'U'
+    else
+        @assert false
+    end
+end
 
 
-# html_subscript_string(n::Int) = "<sub>" * string(n) * "</sub>"
+unicode_subscript_string(n::Int) = foldl(replace,
+    map(Pair, Char.(0x30:0x39), Char.(0x2080:0x2089));
+    init=string(n))
 
 
-# unicode_defect_string(shape_table::Vector{Tuple{Int,Tuple{Int,Int}}}) =
-#     join([
-#         (num == 1 ? "" : string(num)) *
-#             shape_code(shape) * unicode_subscript_string(degree)
-#         for (num, (degree, shape)) in shape_table])
+html_subscript_string(n::Int) = "<sub>" * string(n) * "</sub>"
 
 
-# html_defect_string(shape_table::Vector{Tuple{Int,Tuple{Int,Int}}}) =
-#     join([
-#         (num == 1 ? "" : string(num)) *
-#             shape_code(shape) * html_subscript_string(degree)
-#         for (num, (degree, shape)) in shape_table])
+unicode_defect_string(shape_table::Vector{Tuple{Int,Tuple{Int,Int}}}) =
+    join([
+        (num == 1 ? "" : string(num)) *
+            shape_code(shape) * unicode_subscript_string(degree)
+        for (num, (degree, shape)) in shape_table])
+
+
+html_defect_string(shape_table::Vector{Tuple{Int,Tuple{Int,Int}}}) =
+    join([
+        (num == 1 ? "" : string(num)) *
+            shape_code(shape) * html_subscript_string(degree)
+        for (num, (degree, shape)) in shape_table])
 
 
 ####################################################### SYMMETRIZED RIESZ ENERGY
