@@ -7,10 +7,10 @@ using DZOptimization.ExampleFunctions:
 using MultiFloats: Float64x2, Float64x3
 using StaticArrays: SArray, SVector, cross, norm
 
-export PCREO_OUTPUT_DIRECTORY, PCREO_DATABASE_DIRECTORY,
-    constrain_sphere!, spherical_riesz_gradient!,
+export constrain_sphere!, spherical_riesz_gradient!,
     spherical_riesz_gradient, spherical_riesz_hessian,
-    run!, convex_hull_facets, adjacency_structure,
+    run!, # convex_hull_facets,
+    adjacency_structure,
     packing_radius, covering_radius, symmetrize!, parallel_facet_distance,
     PCREORecord,
     defect_graph, defect_classes, unicode_defect_string, html_defect_string,
@@ -29,19 +29,19 @@ export PCREO_OUTPUT_DIRECTORY, PCREO_DATABASE_DIRECTORY,
 #     "^PCREO-([0-9]{2})-([0-9]{4})-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" *
 #     "[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\\.csv\$")
 
-@static if Sys.iswindows()
-    const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREOOutput"
-else
-    const PCREO_OUTPUT_DIRECTORY = "/home/dkzhang/pcreo-output"
-end
+# @static if Sys.iswindows()
+#     const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREOOutput"
+# else
+#     const PCREO_OUTPUT_DIRECTORY = "/home/dkzhang/pcreo-output"
+# end
 
-const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
+# const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
 
-@static if Sys.iswindows()
-    const QCONVEX_PATH = "C:\\Programs\\qhull-2020.2\\bin\\qconvex.exe"
-else
-    const QCONVEX_PATH = "qconvex"
-end
+# @static if Sys.iswindows()
+#     const QCONVEX_PATH = "C:\\Programs\\qhull-2020.2\\bin\\qconvex.exe"
+# else
+#     const QCONVEX_PATH = "qconvex"
+# end
 
 ######################################################## RIESZ ENERGY ON SPHERES
 
@@ -102,45 +102,45 @@ end
 ###################################################################### ADJACENCY
 
 
-function convex_hull_facets(points::Vector{SVector{N,T}}) where {T,N}
-    @assert length(points) >= 4
-    num_retries = 0
-    while true
-        buffer = IOBuffer()
-        process = open(`$QCONVEX_PATH i`, buffer, write=true)
-        println(process, N)
-        println(process, length(points))
-        for point in points
-            for coord in point
-                print(process, ' ', Float64(coord))
-            end
-            println(process)
-        end
-        close(process)
-        wait(process)
-        first = true
-        num_facets = 0
-        result = Vector{Int}[]
-        seek(buffer, 0)
-        for line in eachline(buffer)
-            if first
-                num_facets = parse(Int, line)
-                first = false
-            else
-                push!(result, [parse(Int, s) + 1 for s in split(line)])
-            end
-        end
-        if (num_facets > 0) && (num_facets == length(result))
-            return result
-        else
-            # Sometimes, qconvex doesn't work, and we need to try again.
-            num_retries += 1
-            if num_retries >= 10
-                error("qconvex failed to return a result after ten tries.")
-            end
-        end
-    end
-end
+# function convex_hull_facets(points::Vector{SVector{N,T}}) where {T,N}
+#     @assert length(points) >= 4
+#     num_retries = 0
+#     while true
+#         buffer = IOBuffer()
+#         process = open(`$QCONVEX_PATH i`, buffer, write=true)
+#         println(process, N)
+#         println(process, length(points))
+#         for point in points
+#             for coord in point
+#                 print(process, ' ', Float64(coord))
+#             end
+#             println(process)
+#         end
+#         close(process)
+#         wait(process)
+#         first = true
+#         num_facets = 0
+#         result = Vector{Int}[]
+#         seek(buffer, 0)
+#         for line in eachline(buffer)
+#             if first
+#                 num_facets = parse(Int, line)
+#                 first = false
+#             else
+#                 push!(result, [parse(Int, s) + 1 for s in split(line)])
+#             end
+#         end
+#         if (num_facets > 0) && (num_facets == length(result))
+#             return result
+#         else
+#             # Sometimes, qconvex doesn't work, and we need to try again.
+#             num_retries += 1
+#             if num_retries >= 10
+#                 error("qconvex failed to return a result after ten tries.")
+#             end
+#         end
+#     end
+# end
 
 
 function dict_incr!(d::Dict{K,Int}, k::K) where {K}
@@ -324,7 +324,7 @@ end
 
 function PCREORecord(filepath::String)
     entries = split(read(filepath, String), "\n\n")
-    @assert 4 <= length(entries) <= 5
+    @assert length(entries) == 5
 
     geometric_properties = split(entries[1], '\n')
     @assert length(geometric_properties) == 7
@@ -361,16 +361,12 @@ function PCREORecord(filepath::String)
         for line in split(entries[4], '\n')
         if !isempty(strip(line))]
 
-    if length(entries) >= 5
-        initial_points = reshape([
-            parse(Float64, strip(entry))
-            for line in split(entries[5], '\n')
-            for entry in split(line, ',')
-            if !isempty(strip(line))],
-            dimension, :)
-    else
-        initial_points = Matrix{Float64}(undef, dimension, 0)
-    end
+    initial_points = reshape([
+        parse(Float64, strip(entry))
+        for line in split(entries[5], '\n')
+        for entry in split(line, ',')
+        if !isempty(strip(line))],
+        dimension, :)
 
     return PCREORecord(dimension, num_points, symmetry_group,
         energy, first_eigenvalue,

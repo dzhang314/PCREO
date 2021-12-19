@@ -40,3 +40,6 @@
 
 # Python module cache files
 __pycache__
+
+# MacOS Finder files
+.DS_Store
