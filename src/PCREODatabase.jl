@@ -14,29 +14,35 @@ lsdir(path...) = filter(!startswith('.'),
     readdir(joinpath(path...); sort=false))
 
 
-const PCREO_CACHE = Dict{Int,Vector{Tuple{Float64x3,UUID}}}()
-
-
-println("Building PCREO cache...")
-flush(stdout)
-for num_dir in lsdir(ENV["PCREO_DATABASE_DIRECTORY"])
-    println("Scanning directory $num_dir...")
+function build_pcreo_cache(n_min::Int, n_max::Int)
+    result = Dict{Int,Vector{Tuple{Float64x3,UUID}}}()
+    println("Building PCREO cache...")
     flush(stdout)
-    num_points = parse(Int, num_dir)
-    @assert !haskey(PCREO_CACHE, num_points)
-    entry_list = Tuple{Float64x3,UUID}[]
-    for entry_name in lsdir(ENV["PCREO_DATABASE_DIRECTORY"], num_dir)
-        reference_name = "PCREO-03-$num_dir-$entry_name.csv"
-        reference = PCREORecord(joinpath(
-            ENV["PCREO_DATABASE_DIRECTORY"], num_dir,
-            entry_name, reference_name))
-        push!(entry_list, (reference.energy, UUID(entry_name)))
+    for num_dir in lsdir(ENV["PCREO_DATABASE_DIRECTORY"])
+        num_points = parse(Int, num_dir)
+        @assert !haskey(result, num_points)
+        if n_min <= num_points <= n_max
+            println("Scanning directory $num_dir...")
+            flush(stdout)
+            entry_list = Tuple{Float64x3,UUID}[]
+            for entry_name in lsdir(ENV["PCREO_DATABASE_DIRECTORY"], num_dir)
+                reference_name = "PCREO-03-$num_dir-$entry_name.csv"
+                reference = PCREORecord(joinpath(
+                    ENV["PCREO_DATABASE_DIRECTORY"], num_dir,
+                    entry_name, reference_name))
+                push!(entry_list, (reference.energy, UUID(entry_name)))
+            end
+            sort!(entry_list)
+            result[num_points] = entry_list
+        end
     end
-    sort!(entry_list)
-    PCREO_CACHE[num_points] = entry_list
+    println("Finished building PCREO cache.")
+    flush(stdout)
+    return result
 end
-println("Finished building PCREO cache.")
-flush(stdout)
+
+
+const PCREO_CACHE = build_pcreo_cache(parse(Int, ARGS[1]), parse(Int, ARGS[2]))
 
 
 const UUID_REGEX = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" *
