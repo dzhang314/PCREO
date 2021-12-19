@@ -66,6 +66,9 @@ function add_to_database!(filepath::String)
     if !isdir(num_dir)
         mkdir(num_dir)
     end
+    if !haskey(PCREO_CACHE, record.num_points)
+        PCREO_CACHE[record.num_points] = Tuple{Float64x3,UUID}[]
+    end
     for (reference_energy, reference_uuid) in PCREO_CACHE[record.num_points]
         if isapprox(record.energy, reference_energy, rtol=Float64x3(2^-80))
             entry_dir = joinpath(num_dir, string(reference_uuid))
@@ -90,28 +93,28 @@ function add_to_database!(filepath::String)
 end
 
 
+function in_range(n_min, n_max)
+    return filename -> n_min <= parse(Int, filename[10:17]) <= n_max
+end
+
+
 function main(n_min::Int, n_max::Int)
-    while true
-        filenames = filter(startswith("PCREO-03-"),
-                           readdir("/Users/dzhang314/pcreo-output-icme"))
-        if length(filenames) > 0
-            filename = rand(filenames)
-            num_points = parse(Int, filename[10:17])
-            if n_min <= num_points <= n_max
-                src = joinpath("/Users/dzhang314/pcreo-output-icme", filename)
-                try
-                    dst = add_to_database!(src)
-                    println(src, " => ", dst)
-                catch e
-                    if e isa AssertionError
-                        println(filename, ": ", e)
-                    else
-                        rethrow(e)
-                    end
-                end
+    filenames = filter(in_range(n_min, n_max),
+                filter(startswith("PCREO-03-"),
+                readdir("/Users/dzhang314/pcreo-output-rice")))
+    for filename in filenames
+        src = joinpath("/Users/dzhang314/pcreo-output-rice", filename)
+        try
+            dst = add_to_database!(src)
+            println(src, " => ", dst)
+            flush(stdout)
+        catch e
+            if e isa AssertionError
+                println(filename, ": ", e)
+                flush(stdout)
+            else
+                rethrow(e)
             end
-        else
-            sleep(1.0)
         end
     end
 end
