@@ -62,24 +62,26 @@ ValenceColor[8] = Purple;
 ValenceColor[_] = White;
 
 PlotPCREOPrimitives[points_List, facets_List] := Block[
-	{vertexColors, facetCenters, neighboringFacets, triangles, dist, dots},
+	{vertexColors, facetCenters, neighboringFacets, dist, k, triangles, dots},
 	vertexColors = ValenceColor /@ Lookup[
 		Counts[Join @@ facets], Range@Length[points], 0];
 	facetCenters = SphericalCircumcenter[points[[#]]]& /@ facets;
 	neighboringFacets = Select[Subsets[Range@Length[facets], {2}],
 		Apply[Length@Intersection[facets[[#1]], facets[[#2]]] >= 2&]];
+	dist = Min[EuclideanDistance @@@ Subsets[points, {2}]];
+	k = 0;
+	While[dist / 2^k > 1/5, ++k];
 	triangles = Join @@ Table[Block[{i, j, a, b},
 		{i, j} = pair;
 		{a, b} = Intersection[facets[[i]], facets[[j]]];
 		{
 			{EdgeForm[], vertexColors[[a]], SphericalTriangle[
-				{points[[a]], facetCenters[[i]], facetCenters[[j]]}, 3]},
+				{points[[a]], facetCenters[[i]], facetCenters[[j]]}, k]},
 			{EdgeForm[], vertexColors[[b]], SphericalTriangle[
-				{points[[b]], facetCenters[[i]], facetCenters[[j]]}, 3]},
-			{Thick, SphericalLine[{facetCenters[[i]], facetCenters[[j]]}, 3]}
+				{points[[b]], facetCenters[[i]], facetCenters[[j]]}, k]},
+			{Thick, SphericalLine[{facetCenters[[i]], facetCenters[[j]]}, k]}
 		}],
 		{pair, neighboringFacets}];
-	dist = Min[EuclideanDistance @@@ Subsets[points, {2}]];
 	dots = {Black, MapThread[Cylinder[{#1, #2}, Min[dist / 8, 0.05]]&,
 		{0.5 * points, points}]};
 	Append[triangles, dots]
@@ -88,8 +90,8 @@ PlotPCREOPrimitives[points_List, facets_List] := Block[
 PlotPCREOPrimitives[{points_List, facets_List}] := PlotPCREOPrimitives[points, facets];
 
 
-$DatabasePath = "D:\\Data\\PCREODatabase";
-$ImagePath = "D:\\Data\\PCREOImages3";
+$DatabasePath = "/Users/dzhang314/PCREODatabase";
+$ImagePath = "/Users/dzhang314/data/PCREOImages";
 LaunchKernels[16];
 
 
@@ -132,6 +134,6 @@ Do[
 			"AnimationRepetitions" -> Infinity
 		]]]]
 	],
-	{numDir, FileNames[All, $DatabasePath]},
-	{dir, FileNames[All, numDir]}
+	{numDir, FileNames["0*", $DatabasePath]},
+	{dir, FileNames["*-*-*-*-*", numDir]}
 ];
