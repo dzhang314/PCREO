@@ -1,7 +1,9 @@
 module PCREO
 
-export constrain_sphere!, spherical_riesz_gradient!, to_point_vector,
-    convex_hull_facets, PCREORecord
+export lsdir, reldiff, to_point_vector,
+    constrain_sphere!, spherical_riesz_gradient!, spherical_riesz_hessian,
+    convex_hull_facets, incidence_degrees,
+    PCREORecord
 
 using DZOptimization: normalize_columns!
 using DZOptimization.ExampleFunctions:
@@ -9,6 +11,29 @@ using DZOptimization.ExampleFunctions:
 using MultiFloats: Float64x2, Float64x3
 using Printf: @printf
 using StaticArrays: SVector
+
+
+############################################################## GENERAL UTILITIES
+
+
+lsdir(path...; join=false) = filter(!startswith('.') ∘ basename,
+    readdir(joinpath(path...); join=join, sort=false))
+
+
+function reldiff(old, new)
+    tmp = new - old
+    return (tmp + tmp) / (abs(old) + abs(new))
+end
+
+
+function to_point_vector(::Val{N}, points::AbstractMatrix{T}) where {T,N}
+    dimension, num_points = size(points)
+    @assert dimension == N
+    return [SVector{N,T}(view(points, :, i)) for i = 1 : num_points]
+end
+
+
+######################################################## RIESZ ENERGY ON SPHERES
 
 
 function constrain_sphere!(points)
@@ -24,14 +49,19 @@ function spherical_riesz_gradient!(grad, points)
 end
 
 
-function to_point_vector(::Val{N}, points::AbstractMatrix{T}) where {T,N}
-    dimension, num_points = size(points)
-    @assert dimension == N
-    return [SVector{N,T}(view(points, :, i)) for i = 1 : num_points]
+function spherical_riesz_hessian(points::AbstractMatrix{T}) where {T}
+    unconstrained_grad = riesz_gradient!(similar(points), points)
+    hess = Array{T,4}(undef, size(points)..., size(points)...)
+    riesz_hessian!(hess, points)
+    constrain_riesz_hessian_sphere!(hess, points, unconstrained_grad)
+    return reshape(hess, length(points), length(points))
 end
 
 
-function convex_hull_facets(points::Vector{SVector{N,T}}) where {T,N}
+###################################################################### ADJACENCY
+
+
+function convex_hull_facets(points::AbstractVector{SVector{N,T}}) where {T,N}
     @assert length(points) >= 4
     num_retries = 0
     while true
@@ -70,6 +100,30 @@ function convex_hull_facets(points::Vector{SVector{N,T}}) where {T,N}
         end
     end
 end
+
+
+function dict_incr!(d::Dict{K,Int}, k::K) where {K}
+    if haskey(d, k)
+        d[k] += 1
+    else
+        d[k] = 1
+    end
+    return d[k]
+end
+
+
+function incidence_degrees(facets::Vector{Vector{Int}})
+    degrees = Dict{Int,Int}()
+    for facet in facets
+        for vertex in facet
+            dict_incr!(degrees, vertex)
+        end
+    end
+    return degrees
+end
+
+
+####################################################################### FILE I/O
 
 
 struct PCREORecord
@@ -251,7 +305,10 @@ function PCREORecord(filepath::AbstractString)
             for entry in split(line, ',')
             if !isempty(strip(line))
         ],
-        (dimension, :) # Point configurations produced with the symmetric solver
+        # Point configurations produced with the symmetry-constrained optimizer
+        # have a smaller number of initial points than total points, so we
+        # leave the second dimension free to vary.
+        (dimension, :)
     )
 
     return PCREORecord(
@@ -274,23 +331,6 @@ end
 
 end # module PCREO
 
-
-# module PCREO
-
-# using DZOptimization: half, normalize_columns!, step!
-# using DZOptimization.ExampleFunctions:
-#     riesz_energy, riesz_gradient!, riesz_hessian!,
-#     constrain_riesz_gradient_sphere!, constrain_riesz_hessian_sphere!
-# using MultiFloats: Float64x2, Float64x3
-# using StaticArrays: SArray, SVector, cross, norm
-
-# export constrain_sphere!, spherical_riesz_gradient!,
-#     spherical_riesz_gradient, spherical_riesz_hessian,
-#     run!, convex_hull_facets, incidence_degrees, adjacency_structure,
-#     packing_radius, covering_radius, symmetrize!, parallel_facet_distance,
-#     defect_graph, defect_classes, unicode_defect_string, html_defect_string,
-#     symmetrized_riesz_energy, symmetrized_riesz_gradient!,
-#     symmetrized_riesz_functors
 
 
 # ########################################################### FILE NAMES AND PATHS
@@ -317,15 +357,6 @@ end # module PCREO
 
 # spherical_riesz_gradient(points) =
 #     spherical_riesz_gradient!(similar(points), points)
-
-
-# function spherical_riesz_hessian(points::Matrix{T}) where {T}
-#     unconstrained_grad = riesz_gradient!(similar(points), points)
-#     hess = Array{T,4}(undef, size(points)..., size(points)...)
-#     riesz_hessian!(hess, points)
-#     constrain_riesz_hessian_sphere!(hess, points, unconstrained_grad)
-#     return reshape(hess, length(points), length(points))
-# end
 
 
 # ################################################################### OPTIMIZATION
@@ -356,30 +387,6 @@ end # module PCREO
 
 
 # ###################################################################### ADJACENCY
-
-
-
-
-
-# function dict_incr!(d::Dict{K,Int}, k::K) where {K}
-#     if haskey(d, k)
-#         d[k] += 1
-#     else
-#         d[k] = 1
-#     end
-#     return d[k]
-# end
-
-
-# function incidence_degrees(facets::Vector{Vector{Int}})
-#     degrees = Dict{Int,Int}()
-#     for facet in facets
-#         for vertex in facet
-#             dict_incr!(degrees, vertex)
-#         end
-#     end
-#     return degrees
-# end
 
 
 # function dict_push!(d::Dict{K,Vector{T}}, k::K, v::T) where {K,T}
