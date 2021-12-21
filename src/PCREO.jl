@@ -7,6 +7,7 @@ using DZOptimization: normalize_columns!
 using DZOptimization.ExampleFunctions:
     riesz_gradient!, constrain_riesz_gradient_sphere!
 using MultiFloats: Float64x2, Float64x3
+using Printf: @printf
 using StaticArrays: SVector
 
 
@@ -128,7 +129,28 @@ function Base.show(io::IO, rec::PCREORecord)
         end
         println(io)
     end
-    return println(io)
+    return nothing
+end
+
+
+function PCREORecord(points::AbstractMatrix{T},
+                     initial_points::AbstractMatrix{U}) where {T,U}
+    dimension, num_points = shape(points)
+
+    return PCREORecord(
+        dimension,
+        num_points,
+        "",
+        Float64x3(0.0),
+        0.0,
+        Float64x2(0.0),
+        Float64x2(0.0),
+        0,0,
+        0.0,
+        Float64x2.(points),
+        Vector{Int}[],
+        Float64.(initial_points)
+    )
 end
 
 
