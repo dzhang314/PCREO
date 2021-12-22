@@ -1,14 +1,19 @@
 module PCREO
 
 export lsdir, reldiff, to_point_vector,
-    constrain_sphere!, spherical_riesz_gradient!, spherical_riesz_hessian,
+    constrain_sphere!, spherical_riesz_gradient!,
+    spherical_riesz_gradient, spherical_riesz_hessian,
     run!, refine,
-    convex_hull_facets, incidence_degrees, spherical_circumcenter,
+    convex_hull_facets, incidence_degrees,
+    adjacency_structure, canonical_graph6,
+    spherical_circumcenter, covering_radius,
     PCREORecord
 
 using DZOptimization: LBFGSOptimizer, step!, normalize_columns!
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, constrain_riesz_gradient_sphere!
+using Graphs: AbstractGraph, savegraph
+using GraphIO: Graph6Format
 using MultiFloats: Float64x2, Float64x3
 using Printf: @printf
 using StaticArrays: SVector, dot, cross, norm
@@ -36,6 +41,26 @@ function to_point_vector(::Val{N}, points::AbstractMatrix{T}) where {T,N}
 end
 
 
+function dict_incr!(d::Dict{K,Int}, k::K) where {K}
+    if haskey(d, k)
+        d[k] += 1
+    else
+        d[k] = 1
+    end
+    return d[k]
+end
+
+
+function dict_push!(d::Dict{K,Vector{T}}, k::K, v::T) where {K,T}
+    if haskey(d, k)
+        push!(d[k], v)
+    else
+        d[k] = [v]
+    end
+    return d[k]
+end
+
+
 ######################################################## RIESZ ENERGY ON SPHERES
 
 
@@ -50,6 +75,10 @@ function spherical_riesz_gradient!(grad, points)
     constrain_riesz_gradient_sphere!(grad, points)
     return grad
 end
+
+
+spherical_riesz_gradient(points) =
+    spherical_riesz_gradient!(similar(points), points)
 
 
 function spherical_riesz_hessian(points::AbstractMatrix{T}) where {T}
@@ -156,17 +185,7 @@ function convex_hull_facets(points::AbstractVector{SVector{N,T}}) where {T,N}
 end
 
 
-function dict_incr!(d::Dict{K,Int}, k::K) where {K}
-    if haskey(d, k)
-        d[k] += 1
-    else
-        d[k] = 1
-    end
-    return d[k]
-end
-
-
-function incidence_degrees(facets::Vector{Vector{Int}})
+function incidence_degrees(facets::AbstractVector{Vector{Int}})
     degrees = Dict{Int,Int}()
     for facet in facets
         for vertex in facet
@@ -174,6 +193,43 @@ function incidence_degrees(facets::Vector{Vector{Int}})
         end
     end
     return degrees
+end
+
+
+function adjacency_structure(facets::AbstractVector{Vector{Int}})
+    pair_dict = Dict{Tuple{Int,Int},Vector{Int}}()
+    for (k, facet) in enumerate(facets)
+        n = length(facet)
+        for i = 1 : n-1
+            for j = i+1 : n
+                @inbounds dict_push!(pair_dict, minmax(facet[i], facet[j]), k)
+            end
+        end
+    end
+    adjacent_vertices = Vector{Tuple{Int,Int}}()
+    adjacent_facets = Vector{Tuple{Int,Int}}()
+    for (vertex_pair, incident_facets) in pair_dict
+        if length(incident_facets) >= 2
+            @assert length(incident_facets) == 2
+            push!(adjacent_vertices, vertex_pair)
+            push!(adjacent_facets, minmax(incident_facets...))
+        end
+    end
+    return (adjacent_vertices, adjacent_facets)
+end
+
+
+function canonical_graph6(g::AbstractGraph)
+    buffer = IOBuffer()
+    redirect_stderr(devnull) do
+        process = open(`labelg`, buffer, write=true)
+        savegraph(process, g, "", Graph6Format())
+        close(process)
+        wait(process)
+    end
+    result = String(take!(buffer))
+    @assert startswith(result, ">>graph6<<")
+    return chomp(result)
 end
 
 
@@ -211,6 +267,19 @@ function spherical_circumcenter(points::AbstractVector{SVector{3,T}},
         end
     end
     return result / norm(result)
+end
+
+
+function covering_radius(points::AbstractVector{SVector{3,T}},
+                         facets::AbstractVector{Vector{Int}}) where {T}
+    result = zero(T)
+    for facet in facets
+        center = spherical_circumcenter(points, facet)
+        for i in facet
+            @inbounds result = max(result, norm(center - points[i]))
+        end
+    end
+    return result
 end
 
 
@@ -443,52 +512,14 @@ end # module PCREO
 
 # # const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
 
-# ######################################################## RIESZ ENERGY ON SPHERES
-
-
-# spherical_riesz_gradient(points) =
-#     spherical_riesz_gradient!(similar(points), points)
-
-
-
-
-
-
 
 # ###################################################################### ADJACENCY
 
 
-# function dict_push!(d::Dict{K,Vector{T}}, k::K, v::T) where {K,T}
-#     if haskey(d, k)
-#         push!(d[k], v)
-#     else
-#         d[k] = [v]
-#     end
-#     return d[k]
-# end
 
 
-# function adjacency_structure(facets::Vector{Vector{Int}})
-#     pair_dict = Dict{Tuple{Int,Int},Vector{Int}}()
-#     for (k, facet) in enumerate(facets)
-#         n = length(facet)
-#         for i = 1 : n-1
-#             for j = i+1 : n
-#                 dict_push!(pair_dict, minmax(facet[i], facet[j]), k)
-#             end
-#         end
-#     end
-#     adjacent_vertices = Vector{Tuple{Int,Int}}()
-#     adjacent_facets = Vector{Tuple{Int,Int}}()
-#     for (vertex_pair, incident_facets) in pair_dict
-#         if length(incident_facets) >= 2
-#             @assert length(incident_facets) == 2
-#             push!(adjacent_vertices, vertex_pair)
-#             push!(adjacent_facets, minmax(incident_facets...))
-#         end
-#     end
-#     return (adjacent_vertices, adjacent_facets)
-# end
+
+
 
 
 # ########################################################### GEOMETRIC PROPERTIES
@@ -505,46 +536,7 @@ end # module PCREO
 # end
 
 
-# function spherical_circumcenter(points::Vector{SVector{3,T}},
-#                                 facet::Vector{Int}) where {T}
-#     n = length(facet)
-#     result = zero(SVector{3,T})
-#     for i = 1 : n-2
-#         for j = i+1 : n-1
-#             for k = j+1 : n
-#                 @inbounds a = points[facet[i]]
-#                 @inbounds b = points[facet[j]]
-#                 @inbounds c = points[facet[k]]
-#                 normal = cross(a - b, b - c)
-#                 norm2 = normal' * normal
-#                 denom = norm2 + norm2
-#                 alpha = ((b - c)' * (b - c)) * ((a - b)' * (a - c))
-#                 beta  = ((a - c)' * (a - c)) * ((b - a)' * (b - c))
-#                 gamma = ((a - b)' * (a - b)) * ((c - a)' * (c - b))
-#                 result += (alpha * a + beta * b + gamma * c) / denom
-#             end
-#         end
-#     end
-#     return result / norm(result)
-# end
-
-
 # middle(x::AbstractVector) = x[(length(x) + 1) >> 1]
-
-
-# function covering_radius(points::Vector{SVector{3,T}},
-#                          facets::Vector{Vector{Int}}) where {T}
-#     result = zero(T)
-#     for facet in facets
-#         center = spherical_circumcenter(points, facet)
-#         radii = [norm(center - points[i]) for i in facet]
-#         # TODO: Why does this occasionally fail?
-#         # lo, hi = extrema(radii)
-#         # @assert 0.0 <= hi - lo <= epsilon
-#         result = max(result, maximum(radii))
-#     end
-#     return result
-# end
 
 
 # ############################################################ CONVERGENCE TESTING
