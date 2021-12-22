@@ -2,22 +2,25 @@ module PCREO
 
 export lsdir, reldiff, to_point_vector,
     constrain_sphere!, spherical_riesz_gradient!, spherical_riesz_hessian,
-    convex_hull_facets, incidence_degrees,
+    run!, refine,
+    convex_hull_facets, incidence_degrees, spherical_circumcenter,
     PCREORecord
 
-using DZOptimization: normalize_columns!
+using DZOptimization: LBFGSOptimizer, step!, normalize_columns!
 using DZOptimization.ExampleFunctions:
-    riesz_gradient!, constrain_riesz_gradient_sphere!
+    riesz_energy, riesz_gradient!, constrain_riesz_gradient_sphere!
 using MultiFloats: Float64x2, Float64x3
 using Printf: @printf
-using StaticArrays: SVector
+using StaticArrays: SVector, dot, cross, norm
 
 
 ############################################################## GENERAL UTILITIES
 
 
-lsdir(path...; join=false) = filter(!startswith('.') ∘ basename,
-    readdir(joinpath(path...); join=join, sort=false))
+lsdir(path...; join=false) = filter(
+    !startswith('.') ∘ basename,
+    readdir(joinpath(path...); join=join, sort=false)
+)
 
 
 function reldiff(old, new)
@@ -55,6 +58,57 @@ function spherical_riesz_hessian(points::AbstractMatrix{T}) where {T}
     riesz_hessian!(hess, points)
     constrain_riesz_hessian_sphere!(hess, points, unconstrained_grad)
     return reshape(hess, length(points), length(points))
+end
+
+
+################################################################### OPTIMIZATION
+
+
+function run!(opt; quiet::Bool=true, framerate=10)
+    if quiet
+        while !opt.has_converged[]
+            step!(opt)
+        end
+        return opt
+    else
+        last_print_time = time_ns()
+        frame_time = round(Int, 1_000_000_000 / framerate)
+        while !opt.has_converged[]
+            step!(opt)
+            if time_ns() >= last_print_time + frame_time
+                println(opt.iteration_count[], '\t',
+                        opt.current_objective_value[])
+                last_print_time += frame_time
+            end
+        end
+        println(opt.iteration_count[], '\t',
+                opt.current_objective_value[])
+        return opt
+    end
+end
+
+
+function refine(points::Matrix{T}, initial_step_size::T,
+                history_length::Int) where {T}
+    constrain_sphere!(points)
+    energy = riesz_energy(points)
+    @assert isfinite(energy)
+    while true
+        opt = LBFGSOptimizer(
+            riesz_energy, spherical_riesz_gradient!, constrain_sphere!,
+            points, initial_step_size, history_length
+        )
+        run!(opt; quiet=!(stdout isa Base.TTY))
+        next_energy = opt.current_objective_value[]
+        next_points = opt.current_point
+        if next_energy < energy
+            energy = next_energy
+            points = next_points
+        else
+            break
+        end
+    end
+    return (points, energy)
 end
 
 
@@ -120,6 +174,43 @@ function incidence_degrees(facets::Vector{Vector{Int}})
         end
     end
     return degrees
+end
+
+
+####################################################################### GEOMETRY
+
+
+function spherical_circumcenter(a::SVector{3,T}, b::SVector{3,T},
+                                c::SVector{3,T}) where {T}
+    p = cross(b - a, c - a)
+    p /= norm(p)
+    if signbit(dot(p, a))
+        @assert signbit(dot(p, b))
+        @assert signbit(dot(p, c))
+        return -p
+    else
+        @assert !signbit(dot(p, b))
+        @assert !signbit(dot(p, c))
+        return +p
+    end
+end
+
+
+function spherical_circumcenter(points::AbstractVector{SVector{3,T}},
+                                facet::AbstractVector{Int}) where {T}
+    n = length(facet)
+    result = zero(SVector{3,T})
+    for i = 1 : n-2
+        for j = i+1 : n-1
+            for k = j+1 : n
+                @inbounds a = points[facet[i]]
+                @inbounds b = points[facet[j]]
+                @inbounds c = points[facet[k]]
+                result += spherical_circumcenter(a, b, c)
+            end
+        end
+    end
+    return result / norm(result)
 end
 
 
@@ -359,31 +450,9 @@ end # module PCREO
 #     spherical_riesz_gradient!(similar(points), points)
 
 
-# ################################################################### OPTIMIZATION
 
 
-# function run!(opt; quiet::Bool=true, framerate=10)
-#     if quiet
-#         while !opt.has_converged[]
-#             step!(opt)
-#         end
-#         return opt
-#     else
-#         last_print_time = time_ns()
-#         frame_time = round(Int, 1_000_000_000 / framerate)
-#         while !opt.has_converged[]
-#             step!(opt)
-#             if time_ns() - last_print_time >= frame_time
-#                 println(opt.iteration_count[], '\t',
-#                         opt.current_objective_value[])
-#                 last_print_time += frame_time
-#             end
-#         end
-#         println(opt.iteration_count[], '\t',
-#                 opt.current_objective_value[])
-#         return opt
-#     end
-# end
+
 
 
 # ###################################################################### ADJACENCY
