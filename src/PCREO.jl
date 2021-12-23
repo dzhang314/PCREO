@@ -1,6 +1,6 @@
 module PCREO
 
-export lsdir, reldiff, to_point_vector,
+export lsdir, reldiff, to_point_vector, dict_push!,
     constrain_sphere!, spherical_riesz_gradient!,
     spherical_riesz_gradient, spherical_riesz_hessian,
     run!, refine,
