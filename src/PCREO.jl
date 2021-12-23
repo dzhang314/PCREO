@@ -4,15 +4,16 @@ export lsdir, reldiff, to_point_vector,
     constrain_sphere!, spherical_riesz_gradient!,
     spherical_riesz_gradient, spherical_riesz_hessian,
     run!, refine,
-    convex_hull_facets, incidence_degrees,
-    adjacency_structure, canonical_graph6,
+    convex_hull_facets, incidence_degrees, adjacency_structure,
+    nearest_neighbor_graph, canonical_graph6,
     spherical_circumcenter, covering_radius,
     PCREORecord
 
 using DZOptimization: LBFGSOptimizer, step!, normalize_columns!
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, constrain_riesz_gradient_sphere!
-using Graphs: AbstractGraph, savegraph
+using Graphs: AbstractGraph, SimpleGraphFromIterator, savegraph
+using Graphs.SimpleGraphs: SimpleEdge
 using GraphIO: Graph6Format
 using MultiFloats: Float64x2, Float64x3
 using Printf: @printf
@@ -219,18 +220,52 @@ function adjacency_structure(facets::AbstractVector{Vector{Int}})
 end
 
 
-function canonical_graph6(g::AbstractGraph)
-    buffer = IOBuffer()
-    redirect_stderr(devnull) do
-        process = open(`labelg`, buffer, write=true)
-        savegraph(process, g, "", Graph6Format())
-        close(process)
-        wait(process)
+function nearest_neighbor_graph(filepath::AbstractString)
+    contents = read(filepath, String)
+    entries = split(contents, "\n\n")
+    @assert length(entries) == 5
+    pair_dict = Dict{Tuple{Int,Int},Int}()
+    for line in split(entries[4], '\n')
+        facet = [parse(Int, entry) for entry in split(line, ',')]
+        n = length(facet)
+        for i = 1 : n-1
+            for j = i+1 : n
+                @inbounds dict_incr!(pair_dict, minmax(facet[i], facet[j]))
+            end
+        end
     end
-    result = String(take!(buffer))
-    @assert startswith(result, ">>graph6<<")
-    return chomp(result)
+    return SimpleGraphFromIterator(
+        SimpleEdge(vertex_pair)
+        for (vertex_pair, num_incident_facets) in pair_dict
+        if num_incident_facets >= 2
+    )
 end
+
+
+function canonical_graph6(g::AbstractGraph)
+    num_retries = 0
+    while true
+        inputbuf = IOBuffer()
+        savegraph(inputbuf, g, "", Graph6Format())
+        seek(inputbuf, 0)
+        outputbuf = IOBuffer()
+        run(pipeline(`labelg`; stdin=inputbuf, stdout=outputbuf,
+                               stderr=devnull); wait=true)
+        result = String(take!(outputbuf))
+        if startswith(result, ">>graph6<<")
+            return chomp(result)
+        else
+            num_retries += 1
+            if num_retries >= 10
+                error("labelg failed to return a result after ten tries.")
+            end
+        end
+    end
+end
+
+
+canonical_graph6(filepath::AbstractString) =
+    canonical_graph6(nearest_neighbor_graph(filepath))
 
 
 ####################################################################### GEOMETRY
@@ -511,15 +546,6 @@ end # module PCREO
 # # end
 
 # # const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
-
-
-# ###################################################################### ADJACENCY
-
-
-
-
-
-
 
 
 # ########################################################### GEOMETRIC PROPERTIES
