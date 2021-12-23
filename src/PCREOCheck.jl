@@ -12,6 +12,7 @@ using PCREO
 
 
 function main()
+    @assert isdir(ENV["PCREO_DATABASE_DIRECTORY"])
     for num_dir in lsdir(ENV["PCREO_DATABASE_DIRECTORY"]; join=true)
         println(num_dir)
         flush(stdout)
@@ -28,6 +29,7 @@ function main()
                         error(record_path)
                     end
                 end
+                write(record_path, new)
             end
         end
     end
