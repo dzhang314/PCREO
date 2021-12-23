@@ -5,16 +5,15 @@ export lsdir, reldiff, to_point_vector,
     spherical_riesz_gradient, spherical_riesz_hessian,
     run!, refine,
     convex_hull_facets, incidence_degrees, adjacency_structure,
-    nearest_neighbor_graph, canonical_graph6,
+    nearest_neighbor_graph, write_graph6, canonical_graph6,
     spherical_circumcenter, covering_radius,
     PCREORecord
 
 using DZOptimization: LBFGSOptimizer, step!, normalize_columns!
 using DZOptimization.ExampleFunctions:
     riesz_energy, riesz_gradient!, constrain_riesz_gradient_sphere!
-using Graphs: AbstractGraph, SimpleGraphFromIterator, savegraph
+using Graphs: AbstractGraph, SimpleGraph, SimpleGraphFromIterator, nv
 using Graphs.SimpleGraphs: SimpleEdge
-using GraphIO: Graph6Format
 using MultiFloats: Float64x2, Float64x3
 using Printf: @printf
 using StaticArrays: SVector, dot, cross, norm
@@ -220,6 +219,9 @@ function adjacency_structure(facets::AbstractVector{Vector{Int}})
 end
 
 
+###################################################################### GRAPH I/O
+
+
 function nearest_neighbor_graph(filepath::AbstractString)
     contents = read(filepath, String)
     entries = split(contents, "\n\n")
@@ -242,11 +244,100 @@ function nearest_neighbor_graph(filepath::AbstractString)
 end
 
 
+@inline write_graph6_header(io::IO) = write(io, ">>graph6<<")
+
+
+@inline write_graph6_byte(io::IO, b::UInt8) = write(io, b + UInt8(63))
+
+
+function write_graph6_num_vertices(io::IO, n::Int)
+    @assert 0 < n < Int64(2)^36
+    if n < 63
+        write_graph6_byte(io, UInt8(n))
+    elseif n < 258048
+        write(io, UInt8(126))
+        write_graph6_byte(io, UInt8((0x000000000003f000 & n) >> 12))
+        write_graph6_byte(io, UInt8((0x0000000000000fc0 & n) >>  6))
+        write_graph6_byte(io, UInt8((0x000000000000003f & n) >>  0))
+    else
+        write(io, UInt8(126))
+        write(io, UInt8(126))
+        write_graph6_byte(io, UInt8((0x0000000fc0000000 & n) >> 30))
+        write_graph6_byte(io, UInt8((0x000000003f000000 & n) >> 24))
+        write_graph6_byte(io, UInt8((0x0000000000fc0000 & n) >> 18))
+        write_graph6_byte(io, UInt8((0x000000000003f000 & n) >> 12))
+        write_graph6_byte(io, UInt8((0x0000000000000fc0 & n) >>  6))
+        write_graph6_byte(io, UInt8((0x000000000000003f & n) >>  0))
+    end
+    return nothing
+end
+
+
+function write_graph6_adjacency_matrix(io::IO, g::SimpleGraph{T}) where {T}
+    n = nv(g)
+    bits = UInt8(0)
+    k = 0
+    @inbounds for j = 2 : n
+        next = 1
+        for i in g.fadjlist[j]
+            if i < j
+                while next < i
+                    bits <<= 1
+                    k += 1
+                    if k >= 6
+                        write_graph6_byte(io, bits)
+                        bits = UInt8(0)
+                        k = 0
+                    end
+                    next += 1
+                end
+                bits = (bits << 1) | UInt8(1)
+                k += 1
+                if k >= 6
+                    write_graph6_byte(io, bits)
+                    bits = UInt8(0)
+                    k = 0
+                end
+                next += 1
+            else
+                break
+            end
+        end
+        while next < j
+            bits <<= 1
+            k += 1
+            if k >= 6
+                write_graph6_byte(io, bits)
+                bits = UInt8(0)
+                k = 0
+            end
+            next += 1
+        end
+    end
+    if k > 0
+        write(io, (bits << (6 - k)) + UInt8(63))
+    end
+    return nothing
+end
+
+
+function write_graph6(io::IO, g::SimpleGraph{T}) where {T}
+    write_graph6_header(io)
+    write_graph6_num_vertices(io, nv(g))
+    write_graph6_adjacency_matrix(io, g)
+    return nothing
+end
+
+
+############################################################# GRAPH CANONIZATION
+
+
 function canonical_graph6(g::AbstractGraph)
     num_retries = 0
     while true
         inputbuf = IOBuffer()
-        savegraph(inputbuf, g, "", Graph6Format())
+        write_graph6(inputbuf, g)
+        println(inputbuf)
         seek(inputbuf, 0)
         outputbuf = IOBuffer()
         run(pipeline(`labelg`; stdin=inputbuf, stdout=outputbuf,
@@ -527,9 +618,7 @@ end
 end # module PCREO
 
 
-
 # ########################################################### FILE NAMES AND PATHS
-
 
 # # const PCREO_DIRNAME_REGEX = Regex(
 # #     "^PCREO-([0-9]{2})-([0-9]{4})-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" *
@@ -539,17 +628,7 @@ end # module PCREO
 # #     "^PCREO-([0-9]{2})-([0-9]{4})-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-" *
 # #     "[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\\.csv\$")
 
-# # @static if Sys.iswindows()
-# #     const PCREO_OUTPUT_DIRECTORY = "D:\\Data\\PCREOOutput"
-# # else
-# #     const PCREO_OUTPUT_DIRECTORY = "/home/dkzhang/pcreo-output"
-# # end
-
-# # const PCREO_DATABASE_DIRECTORY = "D:\\Data\\PCREODatabase"
-
-
 # ########################################################### GEOMETRIC PROPERTIES
-
 
 # function packing_radius(points::Vector{SVector{N,T}},
 #                         facets::Vector{Vector{Int}}) where {T,N}
@@ -561,12 +640,9 @@ end # module PCREO
 #     return half(T) * result
 # end
 
-
 # middle(x::AbstractVector) = x[(length(x) + 1) >> 1]
 
-
 # ############################################################ CONVERGENCE TESTING
-
 
 # function symmetrize!(mat::Matrix{T}) where {T}
 #     m, n = size(mat)
@@ -579,7 +655,6 @@ end # module PCREO
 #     end
 #     return mat
 # end
-
 
 # function facet_normal_vector(points::Vector{SVector{3,T}}) where {T}
 #     n = length(points)
@@ -604,7 +679,6 @@ end # module PCREO
 #     return result / norm(result)
 # end
 
-
 # function parallel_facet_distance(points::Vector{SVector{3,T}},
 #                                  facets::Vector{Vector{Int}}) where {T}
 #     _, adjacent_facets = adjacency_structure(facets)
@@ -613,9 +687,7 @@ end # module PCREO
 #                    for (i, j) in adjacent_facets)
 # end
 
-
 # ############################################################ TOPOLOGICAL DEFECTS
-
 
 # function defect_graph(facets::Vector{Vector{Int}})
 #     adjacent_vertices, _ = adjacency_structure(facets)
@@ -638,7 +710,6 @@ end # module PCREO
 #     end
 #     return (adjacency_lists, degrees)
 # end
-
 
 # function connected_components(adjacency_lists::Dict{V,Vector{V}}) where {V}
 #     visited = Dict{V,Bool}()
@@ -666,7 +737,6 @@ end # module PCREO
 #     return components
 # end
 
-
 # function defect_classes(facets::Vector{Vector{Int}})
 #     adjacency_lists, defect_degrees = defect_graph(facets)
 #     defect_components = connected_components(adjacency_lists)
@@ -685,7 +755,6 @@ end # module PCREO
 #     sort!(defect_table; rev=true)
 #     return defect_table
 # end
-
 
 # function shape_code(n::Int)
 #     if n == 3
@@ -711,14 +780,11 @@ end # module PCREO
 #     end
 # end
 
-
 # unicode_subscript_string(n::Int) = foldl(replace,
 #     map(Pair, Char.(0x30:0x39), Char.(0x2080:0x2089));
 #     init=string(n))
 
-
 # html_subscript_string(n::Int) = "<sub>" * string(n) * "</sub>"
-
 
 # unicode_defect_string(shape_table::Vector{Tuple{Int,Tuple{Int,Int}}}) =
 #     join([
@@ -726,16 +792,13 @@ end # module PCREO
 #             shape_code(shape) * unicode_subscript_string(degree)
 #         for (num, (degree, shape)) in shape_table])
 
-
 # html_defect_string(shape_table::Vector{Tuple{Int,Tuple{Int,Int}}}) =
 #     join([
 #         (num == 1 ? "" : string(num)) *
 #             shape_code(shape) * html_subscript_string(degree)
 #         for (num, (degree, shape)) in shape_table])
 
-
 # ####################################################### SYMMETRIZED RIESZ ENERGY
-
 
 # # Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
 
@@ -786,7 +849,6 @@ end # module PCREO
 #     end
 #     return energy
 # end
-
 
 # # Benchmarked in Julia 1.5.3 for zero allocations or exceptions.
 
@@ -840,19 +902,16 @@ end # module PCREO
 #     return grad
 # end
 
-
 # struct SymmetrizedRieszEnergyFunctor{T}
 #     group::Vector{SArray{Tuple{3,3},T,2,9}}
 #     external_points::Vector{SArray{Tuple{3},T,1,3}}
 #     external_energy::T
 # end
 
-
 # struct SymmetrizedRieszGradientFunctor{T}
 #     group::Vector{SArray{Tuple{3,3},T,2,9}}
 #     external_points::Vector{SArray{Tuple{3},T,1,3}}
 # end
-
 
 # function (sref::SymmetrizedRieszEnergyFunctor{T})(
 #           points::AbstractMatrix{T}) where {T}
@@ -860,14 +919,12 @@ end # module PCREO
 #         points, sref.group, sref.external_points)
 # end
 
-
 # function (srgf::SymmetrizedRieszGradientFunctor{T})(
 #           grad::AbstractMatrix{T}, points::AbstractMatrix{T}) where {T}
 #     symmetrized_riesz_gradient!(grad, points, srgf.group, srgf.external_points)
 #     constrain_riesz_gradient_sphere!(grad, points)
 #     return grad
 # end
-
 
 # function symmetrized_riesz_functors(
 #         ::Type{T}, group_function::Function,
@@ -886,8 +943,3 @@ end # module PCREO
 #                                              external_energy),
 #             SymmetrizedRieszGradientFunctor{T}(group, external_points))
 # end
-
-
-# ################################################################################
-
-# end # module PCREO
