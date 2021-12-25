@@ -6,7 +6,7 @@ using MultiFloats: Float64x2
 using StaticArrays: SVector, dot, cross, norm
 using UUIDs: UUID
 
-push!(LOAD_PATH, "/Users/dzhang314/Documents/GitHub/PCREO/src")
+push!(LOAD_PATH, @__DIR__)
 using PCREO
 
 
