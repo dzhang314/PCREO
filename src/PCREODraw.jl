@@ -150,6 +150,7 @@ const DEGREE_COLOR = Dict{Int,RGB{Float32}}(
     5 => RGB{Float32}(1.0f0, 0.0f0, 0.0f0),
     6 => RGB{Float32}(0.0f0, 1.0f0, 0.0f0),
     7 => RGB{Float32}(0.0f0, 0.0f0, 1.0f0),
+    8 => RGB{Float32}(1.0f0, 0.0f0, 1.0f0),
 )
 
 
