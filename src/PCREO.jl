@@ -11,7 +11,8 @@ export lsdir, reldiff, to_point_vector, dict_push!,
 
 using DZOptimization: LBFGSOptimizer, step!, normalize_columns!
 using DZOptimization.ExampleFunctions:
-    riesz_energy, riesz_gradient!, constrain_riesz_gradient_sphere!
+    riesz_energy, riesz_gradient!, constrain_riesz_gradient_sphere!,
+    riesz_hessian!, constrain_riesz_hessian_sphere!
 using Graphs: AbstractGraph, SimpleGraph, SimpleGraphFromIterator, nv
 using Graphs.SimpleGraphs: SimpleEdge
 using MultiFloats: Float64x2, Float64x3
