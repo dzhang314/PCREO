@@ -3,7 +3,6 @@ module PointGroups
 using GenericSVD: svd
 using NearestNeighbors: KDTree, nn
 using StaticArrays: SArray, SVector, cross, det, norm, qr, svd
-using Suppressor: @suppress
 
 export cyclic_group, rotoreflection_group, pinwheel_group, pyramid_group,
     dihedral_group, prismatic_group, antiprismatic_group,
@@ -36,10 +35,11 @@ function rotation_matrix_z(::Type{T}, i::Int, n::Int) where {T}
             _zero, -_one, _zero,
             _zero, _zero, +_one)
     end
-    c = cospi(T(2*i) / T(n))
-    s = sinpi(T(2*i) / T(n))
+    c = cospi(T(2 * i) / T(n))
+    s = sinpi(T(2 * i) / T(n))
     return SArray{Tuple{3,3},T,2,9}(
-        c, s, _zero, -s, c, _zero, _zero, _zero, _one)
+        c, s, _zero, -s, c, _zero, _zero, _zero, _one
+    )
 end
 
 
@@ -57,10 +57,11 @@ function rotoreflection_matrix_z(::Type{T}, i::Int, n::Int) where {T}
             _zero, -_one, _zero,
             _zero, _zero, -_one)
     end
-    c = cospi(T(2*i) / T(n))
-    s = sinpi(T(2*i) / T(n))
+    c = cospi(T(2 * i) / T(n))
+    s = sinpi(T(2 * i) / T(n))
     return SArray{Tuple{3,3},T,2,9}(
-        c, s, _zero, -s, c, _zero, _zero, _zero, -_one)
+        c, s, _zero, -s, c, _zero, _zero, _zero, -_one
+    )
 end
 
 
@@ -77,7 +78,8 @@ function rotation_matrix_to_x(v::SVector{3,T}) where {T}
     return SArray{Tuple{3,3},T,2,9}(
         x, -y, -z,
         y, _one - y2 / xp1, -yz / xp1,
-        z, -yz / xp1, _one - z2 / xp1)
+        z, -yz / xp1, _one - z2 / xp1
+    )
 end
 
 
@@ -94,7 +96,8 @@ function rotation_matrix_to_y(v::SVector{3,T}) where {T}
     return SArray{Tuple{3,3},T,2,9}(
         _one - x2 / yp1, x, -xz / yp1,
         -x, y, -z,
-        -xz / yp1, z, _one - z2 / yp1)
+        -xz / yp1, z, _one - z2 / yp1
+    )
 end
 
 
@@ -111,7 +114,8 @@ function rotation_matrix_to_z(v::SVector{3,T}) where {T}
     return SArray{Tuple{3,3},T,2,9}(
         _one - x2 / zp1, -xy / zp1, x,
         -xy / zp1, _one - y2 / zp1, y,
-        -x, -y, z)
+        -x, -y, z
+    )
 end
 
 
@@ -121,7 +125,8 @@ function rotation_matrix_x_pi(::Type{T}) where {T}
     return SArray{Tuple{3,3},T,2,9}(
         +_one, _zero, _zero,
         _zero, -_one, _zero,
-        _zero, _zero, -_one)
+        _zero, _zero, -_one
+    )
 end
 
 
@@ -131,7 +136,8 @@ function reflection_matrix_y(::Type{T}) where {T}
     return SArray{Tuple{3,3},T,2,9}(
         +_one, _zero, _zero,
         _zero, -_one, _zero,
-        _zero, _zero, +_one)
+        _zero, _zero, +_one
+    )
 end
 
 
@@ -139,46 +145,55 @@ end
 
 
 cyclic_group(::Type{T}, n::Int) where {T} =
-    [rotation_matrix_z(T, i, n) for i = 0 : n-1]
+    [rotation_matrix_z(T, i, n) for i = 0:n-1]
 
 
 function rotoreflection_group(::Type{T}, n::Int) where {T}
     @assert iseven(n)
-    return [(iseven(i)
-        ? rotation_matrix_z(T, i, n)
-        : rotoreflection_matrix_z(T, i, n))
-        for i = 0 : n-1]
+    return [
+        iseven(i) ?
+        rotation_matrix_z(T, i, n) :
+        rotoreflection_matrix_z(T, i, n)
+        for i = 0:n-1
+    ]
 end
 
 
 pinwheel_group(::Type{T}, n::Int) where {T} = vcat(
-    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
-    [rotoreflection_matrix_z(T, i, n) for i = 0 : n-1])
+    [rotation_matrix_z(T, i, n) for i = 0:n-1],
+    [rotoreflection_matrix_z(T, i, n) for i = 0:n-1]
+)
 
 
 pyramid_group(::Type{T}, n::Int) where {T} = vcat(
-    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
-    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0 : n-1])
+    [rotation_matrix_z(T, i, n) for i = 0:n-1],
+    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0:n-1]
+)
 
 
 dihedral_group(::Type{T}, n::Int) where {T} = vcat(
-    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
-    [rotation_matrix_z(T, i, n) * rotation_matrix_x_pi(T) for i = 0 : n-1])
+    [rotation_matrix_z(T, i, n) for i = 0:n-1],
+    [rotation_matrix_z(T, i, n) * rotation_matrix_x_pi(T) for i = 0:n-1]
+)
 
 
 prismatic_group(::Type{T}, n::Int) where {T} = vcat(
-    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
-    [rotation_matrix_z(T, i, n) * rotation_matrix_x_pi(T) for i = 0 : n-1],
-    [rotoreflection_matrix_z(T, i, n) for i = 0 : n-1],
-    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0 : n-1])
+    [rotation_matrix_z(T, i, n) for i = 0:n-1],
+    [rotation_matrix_z(T, i, n) * rotation_matrix_x_pi(T) for i = 0:n-1],
+    [rotoreflection_matrix_z(T, i, n) for i = 0:n-1],
+    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0:n-1]
+)
 
 
 antiprismatic_group(::Type{T}, n::Int) where {T} = vcat(
-    [rotation_matrix_z(T, i, n) for i = 0 : n-1],
-    [rotoreflection_matrix_z(T, i, 2*n) for i = 1 : 2 : 2*n],
-    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0 : n-1],
-    [rotoreflection_matrix_z(T, i, 2*n) * reflection_matrix_y(T)
-     for i = 1 : 2 : 2*n])
+    [rotation_matrix_z(T, i, n) for i = 0:n-1],
+    [rotoreflection_matrix_z(T, i, 2 * n) for i = 1:2:2*n],
+    [rotation_matrix_z(T, i, n) * reflection_matrix_y(T) for i = 0:n-1],
+    [
+        rotoreflection_matrix_z(T, i, 2 * n) * reflection_matrix_y(T)
+        for i = 1:2:2*n
+    ]
+)
 
 
 ######################################################## POLYHEDRAL POINT GROUPS
@@ -188,18 +203,15 @@ function chiral_tetrahedral_group(::Type{T}) where {T}
     M = SArray{Tuple{3,3},T,2,9}
     _zero = zero(T)
     _one = one(T)
-
     return [
         M(+_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, +_one),
         M(+_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, +_one),
-
         M(_zero, _zero, +_one, +_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, -_one, +_one, _zero, _zero, _zero, -_one, _zero),
         M(_zero, _zero, -_one, -_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, +_one, -_one, _zero, _zero, _zero, -_one, _zero),
-
         M(_zero, +_one, _zero, _zero, _zero, +_one, +_one, _zero, _zero),
         M(_zero, -_one, _zero, _zero, _zero, -_one, +_one, _zero, _zero),
         M(_zero, +_one, _zero, _zero, _zero, -_one, -_one, _zero, _zero),
@@ -212,33 +224,27 @@ function full_tetrahedral_group(::Type{T}) where {T}
     M = SArray{Tuple{3,3},T,2,9}
     _zero = zero(T)
     _one = one(T)
-
     return [
         M(+_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, +_one),
         M(+_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, +_one),
-
         M(+_one, _zero, _zero, _zero, _zero, +_one, _zero, +_one, _zero),
         M(+_one, _zero, _zero, _zero, _zero, -_one, _zero, -_one, _zero),
         M(-_one, _zero, _zero, _zero, _zero, +_one, _zero, -_one, _zero),
         M(-_one, _zero, _zero, _zero, _zero, -_one, _zero, +_one, _zero),
-
         M(_zero, _zero, +_one, +_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, -_one, +_one, _zero, _zero, _zero, -_one, _zero),
         M(_zero, _zero, -_one, -_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, +_one, -_one, _zero, _zero, _zero, -_one, _zero),
-
         M(_zero, +_one, _zero, +_one, _zero, _zero, _zero, _zero, +_one),
         M(_zero, -_one, _zero, +_one, _zero, _zero, _zero, _zero, -_one),
         M(_zero, -_one, _zero, -_one, _zero, _zero, _zero, _zero, +_one),
         M(_zero, +_one, _zero, -_one, _zero, _zero, _zero, _zero, -_one),
-
         M(_zero, +_one, _zero, _zero, _zero, +_one, +_one, _zero, _zero),
         M(_zero, -_one, _zero, _zero, _zero, -_one, +_one, _zero, _zero),
         M(_zero, +_one, _zero, _zero, _zero, -_one, -_one, _zero, _zero),
         M(_zero, -_one, _zero, _zero, _zero, +_one, -_one, _zero, _zero),
-
         M(_zero, _zero, +_one, _zero, +_one, _zero, +_one, _zero, _zero),
         M(_zero, _zero, -_one, _zero, -_one, _zero, +_one, _zero, _zero),
         M(_zero, _zero, +_one, _zero, -_one, _zero, -_one, _zero, _zero),
@@ -248,41 +254,34 @@ end
 
 
 pyritohedral_group(::Type{T}) where {T} =
-    vcat(+chiral_tetrahedral_group(T),
-         -chiral_tetrahedral_group(T))
+    vcat(+chiral_tetrahedral_group(T), -chiral_tetrahedral_group(T))
 
 
 function chiral_octahedral_group(::Type{T}) where {T}
     M = SArray{Tuple{3,3},T,2,9}
     _zero = zero(T)
     _one = one(T)
-
     return [
         M(+_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, +_one),
         M(+_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, +_one),
-
         M(_zero, _zero, +_one, +_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, -_one, +_one, _zero, _zero, _zero, -_one, _zero),
         M(_zero, _zero, -_one, -_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, +_one, -_one, _zero, _zero, _zero, -_one, _zero),
-
         M(_zero, +_one, _zero, _zero, _zero, +_one, +_one, _zero, _zero),
         M(_zero, -_one, _zero, _zero, _zero, -_one, +_one, _zero, _zero),
         M(_zero, +_one, _zero, _zero, _zero, -_one, -_one, _zero, _zero),
         M(_zero, -_one, _zero, _zero, _zero, +_one, -_one, _zero, _zero),
-
         M(+_one, _zero, _zero, _zero, _zero, +_one, _zero, -_one, _zero),
         M(+_one, _zero, _zero, _zero, _zero, -_one, _zero, +_one, _zero),
         M(-_one, _zero, _zero, _zero, _zero, +_one, _zero, +_one, _zero),
         M(-_one, _zero, _zero, _zero, _zero, -_one, _zero, -_one, _zero),
-
         M(_zero, -_one, _zero, +_one, _zero, _zero, _zero, _zero, +_one),
         M(_zero, +_one, _zero, +_one, _zero, _zero, _zero, _zero, -_one),
         M(_zero, +_one, _zero, -_one, _zero, _zero, _zero, _zero, +_one),
         M(_zero, -_one, _zero, -_one, _zero, _zero, _zero, _zero, -_one),
-
         M(_zero, _zero, +_one, _zero, -_one, _zero, +_one, _zero, _zero),
         M(_zero, _zero, -_one, _zero, +_one, _zero, +_one, _zero, _zero),
         M(_zero, _zero, +_one, _zero, +_one, _zero, -_one, _zero, _zero),
@@ -292,8 +291,7 @@ end
 
 
 full_octahedral_group(::Type{T}) where {T} =
-    vcat(+chiral_octahedral_group(T),
-         -chiral_octahedral_group(T))
+    vcat(+chiral_octahedral_group(T), -chiral_octahedral_group(T))
 
 
 function chiral_icosahedral_group(::Type{T}) where {T}
@@ -307,16 +305,13 @@ function chiral_icosahedral_group(::Type{T}) where {T}
     quarter = inv(four)
     hphi = quarter * (sqrt(five) + _one)
     hpsi = quarter * (sqrt(five) - _one)
-
     return [
         # Identity matrix
         M(+_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, +_one),
-
         # 180-degree rotations about coordinate axes
         M(+_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, +_one, _zero, _zero, _zero, -_one),
         M(-_one, _zero, _zero, _zero, -_one, _zero, _zero, _zero, +_one),
-
         # 120-degree rotations about [±1, ±1, ±1]
         M(_zero, _zero, +_one, +_one, _zero, _zero, _zero, +_one, _zero),
         M(_zero, _zero, -_one, +_one, _zero, _zero, _zero, -_one, _zero),
@@ -326,7 +321,6 @@ function chiral_icosahedral_group(::Type{T}) where {T}
         M(_zero, -_one, _zero, _zero, _zero, -_one, +_one, _zero, _zero),
         M(_zero, +_one, _zero, _zero, _zero, -_one, -_one, _zero, _zero),
         M(_zero, -_one, _zero, _zero, _zero, +_one, -_one, _zero, _zero),
-
         M(+half, +hphi, +hpsi, +hphi, -hpsi, -half, -hpsi, +half, -hphi),
         M(+half, +hphi, +hpsi, -hphi, +hpsi, +half, +hpsi, -half, +hphi),
         M(+half, +hphi, -hpsi, +hphi, -hpsi, +half, +hpsi, -half, -hphi),
@@ -335,7 +329,6 @@ function chiral_icosahedral_group(::Type{T}) where {T}
         M(+half, -hphi, +hpsi, -hphi, -hpsi, +half, -hpsi, -half, -hphi),
         M(+half, -hphi, -hpsi, +hphi, +hpsi, +half, -hpsi, -half, +hphi),
         M(+half, -hphi, -hpsi, -hphi, -hpsi, -half, +hpsi, +half, -hphi),
-
         M(-half, +hphi, +hpsi, +hphi, +hpsi, +half, +hpsi, +half, -hphi),
         M(-half, +hphi, +hpsi, -hphi, -hpsi, -half, -hpsi, -half, +hphi),
         M(-half, +hphi, -hpsi, +hphi, +hpsi, -half, -hpsi, -half, -hphi),
@@ -344,7 +337,6 @@ function chiral_icosahedral_group(::Type{T}) where {T}
         M(-half, -hphi, +hpsi, -hphi, +hpsi, -half, +hpsi, -half, -hphi),
         M(-half, -hphi, -hpsi, +hphi, -hpsi, -half, +hpsi, -half, +hphi),
         M(-half, -hphi, -hpsi, -hphi, +hpsi, +half, -hpsi, +half, -hphi),
-
         M(+hphi, +hpsi, +half, +hpsi, +half, -hphi, -half, +hphi, +hpsi),
         M(+hphi, +hpsi, +half, -hpsi, -half, +hphi, +half, -hphi, -hpsi),
         M(+hphi, +hpsi, -half, +hpsi, +half, +hphi, +half, -hphi, +hpsi),
@@ -353,7 +345,6 @@ function chiral_icosahedral_group(::Type{T}) where {T}
         M(+hphi, -hpsi, +half, -hpsi, +half, +hphi, -half, -hphi, +hpsi),
         M(+hphi, -hpsi, -half, +hpsi, -half, +hphi, -half, -hphi, -hpsi),
         M(+hphi, -hpsi, -half, -hpsi, +half, -hphi, +half, +hphi, +hpsi),
-
         M(-hphi, +hpsi, +half, +hpsi, -half, +hphi, +half, +hphi, +hpsi),
         M(-hphi, +hpsi, +half, -hpsi, +half, -hphi, -half, -hphi, -hpsi),
         M(-hphi, +hpsi, -half, +hpsi, -half, -hphi, -half, -hphi, +hpsi),
@@ -362,7 +353,6 @@ function chiral_icosahedral_group(::Type{T}) where {T}
         M(-hphi, -hpsi, +half, -hpsi, -half, -hphi, +half, -hphi, +hpsi),
         M(-hphi, -hpsi, -half, +hpsi, +half, -hphi, +half, -hphi, -hpsi),
         M(-hphi, -hpsi, -half, -hpsi, -half, +hphi, -half, +hphi, +hpsi),
-
         M(+hpsi, +half, +hphi, +half, -hphi, +hpsi, +hphi, +hpsi, -half),
         M(+hpsi, +half, +hphi, -half, +hphi, -hpsi, -hphi, -hpsi, +half),
         M(+hpsi, +half, -hphi, +half, -hphi, -hpsi, -hphi, -hpsi, -half),
@@ -371,7 +361,6 @@ function chiral_icosahedral_group(::Type{T}) where {T}
         M(+hpsi, -half, +hphi, -half, -hphi, -hpsi, +hphi, -hpsi, -half),
         M(+hpsi, -half, -hphi, +half, +hphi, -hpsi, +hphi, -hpsi, +half),
         M(+hpsi, -half, -hphi, -half, -hphi, +hpsi, -hphi, +hpsi, -half),
-
         M(-hpsi, +half, +hphi, +half, +hphi, -hpsi, -hphi, +hpsi, -half),
         M(-hpsi, +half, +hphi, -half, -hphi, +hpsi, +hphi, -hpsi, +half),
         M(-hpsi, +half, -hphi, +half, +hphi, +hpsi, +hphi, -hpsi, -half),
@@ -385,8 +374,7 @@ end
 
 
 full_icosahedral_group(::Type{T}) where {T} =
-    vcat(+chiral_icosahedral_group(T),
-         -chiral_icosahedral_group(T))
+    vcat(+chiral_icosahedral_group(T), -chiral_icosahedral_group(T))
 
 
 ################################################### DEGENERATE POLYHEDRAL ORBITS
@@ -596,31 +584,60 @@ end
 
 
 const CHIRAL_POLYHEDRAL_POINT_GROUPS = [
-    (chiral_tetrahedral_group, [tetrahedron_vertices,
-        tetrahedron_edge_centers, tetrahedron_face_centers]),
-    (chiral_octahedral_group, [octahedron_vertices,
-        octahedron_edge_centers, octahedron_face_centers]),
-    (chiral_icosahedral_group, [icosahedron_vertices,
-        icosahedron_edge_centers, icosahedron_face_centers]),
+    (chiral_tetrahedral_group, [
+        tetrahedron_vertices,
+        tetrahedron_edge_centers,
+        tetrahedron_face_centers
+    ]),
+    (chiral_octahedral_group, [
+        octahedron_vertices,
+        octahedron_edge_centers,
+        octahedron_face_centers
+    ]),
+    (chiral_icosahedral_group, [
+        icosahedron_vertices,
+        icosahedron_edge_centers,
+        icosahedron_face_centers
+    ]),
 ]
 
 
 const POLYHEDRAL_POINT_GROUPS = [
-    (chiral_tetrahedral_group, [tetrahedron_vertices,
-        tetrahedron_edge_centers, tetrahedron_face_centers]),
+    (chiral_tetrahedral_group, [
+        tetrahedron_vertices,
+        tetrahedron_edge_centers,
+        tetrahedron_face_centers
+    ]),
     (full_tetrahedral_group, [
-        tetrahedron_vertices, tetrahedron_edge_centers,
-        tetrahedron_face_centers, tetrahedron_rotoinversion_centers]),
+        tetrahedron_vertices,
+        tetrahedron_edge_centers,
+        tetrahedron_face_centers,
+        tetrahedron_rotoinversion_centers
+    ]),
     (pyritohedral_group, [
-        pyritohedron_vertices, tetrahedron_edge_centers]),
-    (chiral_octahedral_group, [octahedron_vertices,
-        octahedron_edge_centers, octahedron_face_centers]),
-    (full_octahedral_group, [octahedron_vertices,
-        octahedron_edge_centers, octahedron_face_centers]),
-    (chiral_icosahedral_group, [icosahedron_vertices,
-        icosahedron_edge_centers, icosahedron_face_centers]),
-    (full_icosahedral_group, [icosahedron_vertices,
-        icosahedron_edge_centers, icosahedron_face_centers]),
+        pyritohedron_vertices,
+        tetrahedron_edge_centers
+    ]),
+    (chiral_octahedral_group, [
+        octahedron_vertices,
+        octahedron_edge_centers,
+        octahedron_face_centers
+    ]),
+    (full_octahedral_group, [
+        octahedron_vertices,
+        octahedron_edge_centers,
+        octahedron_face_centers
+    ]),
+    (chiral_icosahedral_group, [
+        icosahedron_vertices,
+        icosahedron_edge_centers,
+        icosahedron_face_centers
+    ]),
+    (full_icosahedral_group, [
+        icosahedron_vertices,
+        icosahedron_edge_centers,
+        icosahedron_face_centers
+    ]),
 ]
 
 
@@ -637,7 +654,7 @@ end
 
 
 function multiplication_table(
-        group::Vector{SArray{Tuple{N,N},T,2,M}}) where {N,T,M}
+    group::Vector{SArray{Tuple{N,N},T,2,M}}) where {N,T,M}
     n = length(group)
     indices, dists = nn(
         KDTree(SVector{M,T}.(group)),
@@ -650,8 +667,8 @@ function count_central_elements(mul_table::Matrix{Int})
     m, n = size(mul_table)
     @assert m == n
     return count(all(
-        @inbounds mul_table[i,j] == mul_table[j,i]
-        for j = 1 : n) for i = 1 : n)
+        @inbounds mul_table[i, j] == mul_table[j, i]
+        for j = 1:n) for i = 1:n)
 end
 
 
@@ -660,11 +677,11 @@ end
 
 function rotation_axis(mat::SArray{Tuple{3,3},T,2,9}, epsilon) where {T}
     @assert inf_norm(mat' * mat - one(mat)) <= epsilon
-    u, s, v = @suppress svd(mat - sign(det(mat)) * one(mat))
+    u, s, v = svd(mat - sign(det(mat)) * one(mat))
     @assert s[1] > epsilon
     @assert s[2] > epsilon
     @assert zero(T) <= s[3] <= epsilon
-    return v[:,3]
+    return v[:, 3]
 end
 
 
@@ -696,7 +713,7 @@ end
 
 
 function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
-                           epsilon) where {T}
+    epsilon) where {T}
     Point = SArray{Tuple{3},T,1,3}
     points = Vector{Point}()
     for (i, g) in enumerate(group)
@@ -727,26 +744,32 @@ function degenerate_orbits(group::Vector{SArray{Tuple{3,3},T,2,9}},
     @assert all(
         norm(p - q) <= epsilon
         for (_, cluster) in clusters
-        for p in cluster for q in cluster)
+        for p in cluster for q in cluster
+    )
     n = length(clusters)
     @assert all(
         @inbounds norm(clusters[i][1] - clusters[j][1]) > epsilon
-        for i = 1 : n-1 for j = i+1 : n)
-    adjacency_lists = Dict(i => Int[] for i = 1 : n)
+        for i = 1:n-1
+        for j = i+1:n
+    )
+    adjacency_lists = Dict(i => Int[] for i = 1:n)
     for (i, (center, _)) in enumerate(clusters)
         for g in group
             p = g * center
             dist, j = minimum(
                 (norm(p - q), k)
-                for (k, (q, _)) in enumerate(clusters))
+                for (k, (q, _)) in enumerate(clusters)
+            )
             @assert dist <= epsilon
             if i != j
                 @inbounds push!(adjacency_lists[i], j)
             end
         end
     end
-    return [[@inbounds clusters[i][1] for i in comp]
-            for comp in connected_components(adjacency_lists)]
+    return [
+        [@inbounds clusters[i][1] for i in comp]
+        for comp in connected_components(adjacency_lists)
+    ]
 end
 
 
@@ -754,9 +777,11 @@ end
 
 
 function labeled_distances(points::Vector{SVector{N,T}}) where {T,N}
-    return [(sqrt(sum((points[i] - points[j]).^2)), i, j)
-            for j = 2 : length(points)
-            for i = 1 : j-1]
+    return [
+        (sqrt(sum((points[i] - points[j]) .^ 2)), i, j)
+        for j = 2:length(points)
+        for i = 1:j-1
+    ]
 end
 
 
@@ -766,7 +791,7 @@ function bucket_by_first(items::Vector{T}, epsilon) where {T}
         return result
     end
     push!(result, [items[1]])
-    for i = 2 : length(items)
+    for i = 2:length(items)
         if abs(items[i][1] - result[end][end][1]) <= epsilon
             push!(result[end], items[i])
         else
@@ -774,18 +799,18 @@ function bucket_by_first(items::Vector{T}, epsilon) where {T}
         end
     end
     for bucket in result
-        @assert abs(bucket[end][1] - bucket[1][1]) <=epsilon
+        @assert abs(bucket[end][1] - bucket[1][1]) <= epsilon
     end
     return result
 end
 
 
-middle(x::AbstractVector) = x[(length(x) + 1) >> 1]
+middle(x::AbstractVector) = x[(length(x)+1)>>1]
 
 
 function candidate_isometries(
-        a_points::Vector{SVector{3,T}},
-        b_points::Vector{SVector{3,T}}, epsilon) where {T}
+    a_points::Vector{SVector{3,T}},
+    b_points::Vector{SVector{3,T}}, epsilon) where {T}
     _one = one(T)
     two = _one + _one
     four = two + two
@@ -829,8 +854,8 @@ end
 
 
 function isometric(
-        a_points::Vector{SVector{3,T}},
-        b_points::Vector{SVector{3,T}}, epsilon) where {T}
+    a_points::Vector{SVector{3,T}},
+    b_points::Vector{SVector{3,T}}, epsilon) where {T}
     b_tree = KDTree(b_points)
     for mat in candidate_isometries(a_points, b_points, epsilon)
         indices, distances = nn(b_tree, [mat * p for p in a_points])
@@ -843,8 +868,8 @@ end
 
 
 function isometries(
-        a_points::Vector{SVector{3,T}},
-        b_points::Vector{SVector{3,T}}, epsilon) where {T}
+    a_points::Vector{SVector{3,T}},
+    b_points::Vector{SVector{3,T}}, epsilon) where {T}
     result = SArray{Tuple{3,3},T,2,9}[]
     b_tree = KDTree(b_points)
     for mat in candidate_isometries(a_points, b_points, epsilon)
@@ -874,8 +899,10 @@ isometries(points::Vector{SVector{3,T}}, epsilon) where {T} =
 end
 
 
-function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
-                              epsilon) where {T}
+function identify_point_group(
+    group::Vector{SArray{Tuple{3,3},T,2,9}},
+    epsilon
+) where {T}
     n = length(group)
     mul_table, dist = multiplication_table(group)
     @assert dist <= epsilon
@@ -896,11 +923,11 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
     is_abelian = (mul_table == mul_table')
 
     order_table = zeros(Int, n)
-    for g = 1 : n
+    for g = 1:n
         acc = g
         ord = 1
         while acc != id
-            acc = mul_table[acc,g]
+            acc = mul_table[acc, g]
             ord += 1
         end
         order_table[g] = ord
@@ -916,7 +943,7 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
     axes = zeros(SVector{3,T}, n)
 
     for (i, mat) in enumerate(group)
-        u, s, v = @suppress svd(mat - one(mat); full=true)
+        u, s, v = svd(mat - one(mat); full=true)
         if inf_norm(s - [_zero, _zero, _zero]) <= epsilon
             @assert id == i
             @assert !signbit(det(mat))
@@ -927,36 +954,36 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
         elseif inf_norm(s - [two, two, _zero]) <= epsilon
             @assert !signbit(det(mat))
             matrix_types[i] = PureRotation
-            axes[i] = v[:,3]
+            axes[i] = v[:, 3]
         elseif inf_norm(s - [two, _zero, _zero]) <= epsilon
             @assert signbit(det(mat))
             matrix_types[i] = PureReflection
-            axes[i] = v[:,1]
+            axes[i] = v[:, 1]
         elseif abs(s[1] - s[2]) <= epsilon
             @assert !signbit(det(mat))
             @assert s[3] <= epsilon
             matrix_types[i] = GeneralRotation
-            axes[i] = v[:,3]
+            axes[i] = v[:, 3]
         else
             @assert signbit(det(mat))
             @assert abs(s[1] - two) <= epsilon
             @assert abs(s[2] - s[3]) <= epsilon
             matrix_types[i] = GeneralRotoinversion
-            axes[i] = v[:,1]
+            axes[i] = v[:, 1]
         end
     end
 
     has_inversion = (PureInversion in matrix_types)
     has_pure_reflection = (PureReflection in matrix_types)
     is_chiral = (!has_inversion && !has_pure_reflection
-                                && !(GeneralRotoinversion in matrix_types))
+                 && !(GeneralRotoinversion in matrix_types))
 
     principal_axes = [axes[i]
-        for i = 1 : n
-        if order_table[i] == max_order && (
-            matrix_types[i] == PureRotation ||
-            matrix_types[i] == GeneralRotation ||
-            matrix_types[i] == GeneralRotoinversion)]
+                      for i = 1:n
+                      if order_table[i] == max_order && (
+        matrix_types[i] == PureRotation ||
+        matrix_types[i] == GeneralRotation ||
+        matrix_types[i] == GeneralRotoinversion)]
     if isempty(principal_axes)
         principal_axis = zero(SVector{3,T})
         axis_rotation_matrix = identity_matrix
@@ -971,14 +998,15 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
         elseif PureInversion in matrix_types
             return ("C_i", identity_matrix)
         else
-            return ("C_s", rotation_matrix_to_z(axes[3 - id]))
+            return ("C_s", rotation_matrix_to_z(axes[3-id]))
         end
     end
 
-    orthogonal_rotation_indices = [i
-        for i = 1 : n
-        if (matrix_types[i] == PureRotation &&
-            abs(principal_axis' * axes[i]) <= epsilon)]
+    orthogonal_rotation_indices = [
+        i
+        for i = 1:n
+        if (matrix_types[i] == PureRotation && abs(principal_axis' * axes[i]) <= epsilon)
+    ]
     if !isempty(orthogonal_rotation_indices)
         orthogonal_axis =
             axis_rotation_matrix * axes[first(orthogonal_rotation_indices)]
@@ -988,9 +1016,9 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
     end
 
     orthogonal_reflection_indices = [i
-        for i = 1 : n
-        if (matrix_types[i] == PureReflection &&
-            abs(principal_axis' * axes[i]) <= epsilon)]
+                                     for i = 1:n
+                                     if (matrix_types[i] == PureReflection &&
+                                      abs(principal_axis' * axes[i]) <= epsilon)]
     if !isempty(orthogonal_reflection_indices)
         secondary_axis =
             axis_rotation_matrix * axes[first(orthogonal_reflection_indices)]
@@ -1016,7 +1044,7 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
             matrix_types[i] == PureInversion ||
             matrix_types[i] == PureReflection ||
             matrix_types[i] == GeneralRotoinversion)
-        for i = 1 : n)
+        for i = 1:n)
 
     if n == 8
         if is_cyclic
@@ -1059,20 +1087,20 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
 
     is_axial = (max_order >= 3) && all(
         abs(sqrt(abs(axes[i]' * axes[j])) - _one) <= epsilon
-        for i = 1 : n, j = 1 : n
+        for i = 1:n, j = 1:n
         if (order_table[i] == max_order &&
-            order_table[j] == max_order))
+         order_table[j] == max_order))
 
     if is_axial
         @assert iseven(n)
         if is_chiral
             return ("D_$(n >> 1)", axis_rotation_matrix)
         elseif !has_max_order_negative_element
-            refl_index = first(i for i = 1 : n
+            refl_index = first(i for i = 1:n
                                if matrix_types[i] == PureReflection)
             refl_axis = axis_rotation_matrix * axes[refl_index]
             return ("C_$(n >> 1)v",
-                    rotation_matrix_to_y(refl_axis) * axis_rotation_matrix)
+                rotation_matrix_to_y(refl_axis) * axis_rotation_matrix)
         else
             @assert iseven(n >> 1)
             if xor(iseven(n >> 2), PureInversion in matrix_types)
@@ -1096,7 +1124,7 @@ function identify_point_group(group::Vector{SArray{Tuple{3,3},T,2,9}},
                 return ("O", axis_rotation_matrix)
             else
                 return (PureInversion in matrix_types ? "T_h" : "T_d",
-                        axis_rotation_matrix)
+                    axis_rotation_matrix)
             end
         end
     end
@@ -1111,10 +1139,10 @@ function equatorial_points(height::T, offset::T, n::Int) where {T}
     two = _one + _one
     a = sqrt(_one + height * height)
     return [SVector{3,T}(
-            cospi(two * (T(i) + offset) / n),
-            sinpi(two * (T(i) + offset) / n),
-            height) / a
-        for i = 0 : n-1]
+        cospi(two * (T(i) + offset) / n),
+        sinpi(two * (T(i) + offset) / n),
+        height) / a
+            for i = 0:n-1]
 end
 
 
@@ -1124,17 +1152,17 @@ function alternating_equatorial_points(height::T, offset::T, n::Int) where {T}
     two = _one + _one
     a = sqrt(_one + height * height)
     return [SVector{3,T}(
-            cospi(two * (T(i) + offset) / n),
-            sinpi(two * (T(i) + offset) / n),
-            iseven(i) ? height : -height) / a
-        for i = 0 : n-1]
+        cospi(two * (T(i) + offset) / n),
+        sinpi(two * (T(i) + offset) / n),
+        iseven(i) ? height : -height) / a
+            for i = 0:n-1]
 end
 
 
 cyclic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
     equatorial_points(zero(T), zero(T), n),
     equatorial_points(-inv(T(5)), inv(T(20)), n),
-    equatorial_points(inv(T(10)), T(3)/T(20), n))
+    equatorial_points(inv(T(10)), T(3) / T(20), n))
 
 
 rotoreflection_point_configuration(::Type{T}, n::Int) where {T} = vcat(
@@ -1177,8 +1205,8 @@ antiprismatic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
     equatorial_points(zero(T), -inv(T(10)), n),
     equatorial_points(+inv(T(5)), zero(T), n),
     equatorial_points(zero(T), inv(T(2)), n),
-    equatorial_points(zero(T), T(2)/T(5), n),
-    equatorial_points(zero(T), T(3)/T(5), n),
+    equatorial_points(zero(T), T(2) / T(5), n),
+    equatorial_points(zero(T), T(3) / T(5), n),
     equatorial_points(-inv(T(5)), inv(T(2)), n))
 
 
@@ -1186,7 +1214,7 @@ antiprismatic_point_configuration(::Type{T}, n::Int) where {T} = vcat(
 
 
 function matching_distance(a::Vector{SArray{X,T,R,N}},
-                           b::Vector{SArray{X,T,R,N}}) where {X,T,R,N}
+    b::Vector{SArray{X,T,R,N}}) where {X,T,R,N}
     if length(a) != length(b)
         return typemax(T)
     end
@@ -1203,13 +1231,13 @@ end
 
 
 random_rotation(::Type{T}, ::Val{N}) where {T,N} =
-    qr(SArray{Tuple{N,N},T,2,N*N}(randn(N, N))).Q
+    qr(SArray{Tuple{N,N},T,2,N * N}(randn(N, N))).Q
 
 
 function test_alignment(
-        points::Vector{SVector{3,T}},
-        expected_group::Vector{SArray{Tuple{3,3},T,2,9}},
-        epsilon) where {T}
+    points::Vector{SVector{3,T}},
+    expected_group::Vector{SArray{Tuple{3,3},T,2,9}},
+    epsilon) where {T}
     rotation = random_rotation(T, Val(3))
     rotated_points = [rotation * p for p in points]
     name, align = identify_point_group(
@@ -1225,50 +1253,50 @@ end
 
 
 function test_axial_group_alignment(::Type{T}, n_max::Int,
-                                    epsilon) where {T}
+    epsilon) where {T}
     cyclic_groups = [
         test_alignment(cyclic_point_configuration(T, n),
-                       cyclic_group(T, n), epsilon)
-        for n = 1 : n_max]
-    @assert cyclic_groups == ["C_$n" for n = 1 : n_max]
+            cyclic_group(T, n), epsilon)
+        for n = 1:n_max]
+    @assert cyclic_groups == ["C_$n" for n = 1:n_max]
 
     rotoreflection_groups = [
         test_alignment(rotoreflection_point_configuration(T, n),
-                       rotoreflection_group(T, n), epsilon)
-        for n = 2 : 2 : n_max]
+            rotoreflection_group(T, n), epsilon)
+        for n = 2:2:n_max]
     @assert rotoreflection_groups == [n == 2 ? "C_i" : "S_$n"
-                                      for n = 2 : 2 : n_max]
+                                      for n = 2:2:n_max]
 
     pinwheel_groups = [
         test_alignment(pinwheel_point_configuration(T, n),
-                       pinwheel_group(T, n), epsilon)
-        for n = 1 : n_max]
+            pinwheel_group(T, n), epsilon)
+        for n = 1:n_max]
     @assert pinwheel_groups == [n == 1 ? "C_s" : "C_$(n)h"
-                                for n = 1 : n_max]
+                                for n = 1:n_max]
 
     pyramid_groups = [
         test_alignment(pyramid_point_configuration(T, n),
-                       pyramid_group(T, n), epsilon)
-        for n = 2 : n_max]
-    @assert pyramid_groups == ["C_$(n)v" for n = 2 : n_max]
+            pyramid_group(T, n), epsilon)
+        for n = 2:n_max]
+    @assert pyramid_groups == ["C_$(n)v" for n = 2:n_max]
 
     dihedral_groups = [
         test_alignment(dihedral_point_configuration(T, n),
-                       dihedral_group(T, n), epsilon)
-        for n = 2 : n_max]
-    @assert dihedral_groups == ["D_$n" for n = 2 : n_max]
+            dihedral_group(T, n), epsilon)
+        for n = 2:n_max]
+    @assert dihedral_groups == ["D_$n" for n = 2:n_max]
 
     prismatic_groups = [
         test_alignment(prismatic_point_configuration(T, n),
-                       prismatic_group(T, n), epsilon)
-        for n = 2 : n_max]
-    @assert prismatic_groups == ["D_$(n)h" for n = 2 : n_max]
+            prismatic_group(T, n), epsilon)
+        for n = 2:n_max]
+    @assert prismatic_groups == ["D_$(n)h" for n = 2:n_max]
 
     antiprismatic_groups = [
         test_alignment(antiprismatic_point_configuration(T, n),
-                       antiprismatic_group(T, n), epsilon)
-        for n = 2 : n_max]
-    @assert antiprismatic_groups == ["D_$(n)d" for n = 2 : n_max]
+            antiprismatic_group(T, n), epsilon)
+        for n = 2:n_max]
+    @assert antiprismatic_groups == ["D_$(n)d" for n = 2:n_max]
 end
 
 
