@@ -7,7 +7,8 @@ export lsdir, reldiff, to_point_vector, dict_push!,
     convex_hull_facets, incidence_degrees, adjacency_structure,
     nearest_neighbor_graph, write_graph6, canonical_graph6,
     spherical_circumcenter, covering_radius,
-    PCREORecord
+    PCREORecord, symmetrize!, packing_radius,
+    facet_normal_vector, parallel_facet_distance
 
 using DZOptimization: LBFGSOptimizer, step!, normalize_columns!
 using DZOptimization.ExampleFunctions:
@@ -38,7 +39,7 @@ end
 function to_point_vector(::Val{N}, points::AbstractMatrix{T}) where {T,N}
     dimension, num_points = size(points)
     @assert dimension == N
-    return [SVector{N,T}(view(points, :, i)) for i = 1 : num_points]
+    return [SVector{N,T}(view(points, :, i)) for i = 1:num_points]
 end
 
 
@@ -107,19 +108,19 @@ function run!(opt; quiet::Bool=true, framerate=10)
             step!(opt)
             if time_ns() >= last_print_time + frame_time
                 println(opt.iteration_count[], '\t',
-                        opt.current_objective_value[])
+                    opt.current_objective_value[])
                 last_print_time += frame_time
             end
         end
         println(opt.iteration_count[], '\t',
-                opt.current_objective_value[])
+            opt.current_objective_value[])
         return opt
     end
 end
 
 
 function refine(points::Matrix{T}, initial_step_size::T,
-                history_length::Int) where {T}
+    history_length::Int) where {T}
     constrain_sphere!(points)
     energy = riesz_energy(points)
     @assert isfinite(energy)
@@ -201,8 +202,8 @@ function adjacency_structure(facets::AbstractVector{Vector{Int}})
     pair_dict = Dict{Tuple{Int,Int},Vector{Int}}()
     for (k, facet) in enumerate(facets)
         n = length(facet)
-        for i = 1 : n-1
-            for j = i+1 : n
+        for i = 1:n-1
+            for j = i+1:n
                 @inbounds dict_push!(pair_dict, minmax(facet[i], facet[j]), k)
             end
         end
@@ -231,8 +232,8 @@ function nearest_neighbor_graph(filepath::AbstractString)
     for line in split(entries[4], '\n')
         facet = [parse(Int, entry) for entry in split(line, ',')]
         n = length(facet)
-        for i = 1 : n-1
-            for j = i+1 : n
+        for i = 1:n-1
+            for j = i+1:n
                 @inbounds dict_incr!(pair_dict, minmax(facet[i], facet[j]))
             end
         end
@@ -258,8 +259,8 @@ function write_graph6_num_vertices(io::IO, n::Int)
     elseif n < 258048
         write(io, UInt8(126))
         write_graph6_byte(io, UInt8((0x000000000003f000 & n) >> 12))
-        write_graph6_byte(io, UInt8((0x0000000000000fc0 & n) >>  6))
-        write_graph6_byte(io, UInt8((0x000000000000003f & n) >>  0))
+        write_graph6_byte(io, UInt8((0x0000000000000fc0 & n) >> 6))
+        write_graph6_byte(io, UInt8((0x000000000000003f & n) >> 0))
     else
         write(io, UInt8(126))
         write(io, UInt8(126))
@@ -267,8 +268,8 @@ function write_graph6_num_vertices(io::IO, n::Int)
         write_graph6_byte(io, UInt8((0x000000003f000000 & n) >> 24))
         write_graph6_byte(io, UInt8((0x0000000000fc0000 & n) >> 18))
         write_graph6_byte(io, UInt8((0x000000000003f000 & n) >> 12))
-        write_graph6_byte(io, UInt8((0x0000000000000fc0 & n) >>  6))
-        write_graph6_byte(io, UInt8((0x000000000000003f & n) >>  0))
+        write_graph6_byte(io, UInt8((0x0000000000000fc0 & n) >> 6))
+        write_graph6_byte(io, UInt8((0x000000000000003f & n) >> 0))
     end
     return nothing
 end
@@ -278,7 +279,7 @@ function write_graph6_adjacency_matrix(io::IO, g::SimpleGraph{T}) where {T}
     n = nv(g)
     bits = UInt8(0)
     k = 0
-    @inbounds for j = 2 : n
+    @inbounds for j = 2:n
         next = 1
         for i in g.fadjlist[j]
             if i < j
@@ -342,7 +343,7 @@ function canonical_graph6(g::AbstractGraph)
         seek(inputbuf, 0)
         outputbuf = IOBuffer()
         run(pipeline(`labelg`; stdin=inputbuf, stdout=outputbuf,
-                               stderr=devnull); wait=true)
+                stderr=devnull); wait=true)
         result = String(take!(outputbuf))
         if startswith(result, ">>graph6<<")
             return chomp(result)
@@ -364,7 +365,7 @@ canonical_graph6(filepath::AbstractString) =
 
 
 function spherical_circumcenter(a::SVector{3,T}, b::SVector{3,T},
-                                c::SVector{3,T}) where {T}
+    c::SVector{3,T}) where {T}
     p = cross(b - a, c - a)
     p /= norm(p)
     if signbit(dot(p, a))
@@ -380,12 +381,12 @@ end
 
 
 function spherical_circumcenter(points::AbstractVector{SVector{3,T}},
-                                facet::AbstractVector{Int}) where {T}
+    facet::AbstractVector{Int}) where {T}
     n = length(facet)
     result = zero(SVector{3,T})
-    for i = 1 : n-2
-        for j = i+1 : n-1
-            for k = j+1 : n
+    for i = 1:n-2
+        for j = i+1:n-1
+            for k = j+1:n
                 @inbounds a = points[facet[i]]
                 @inbounds b = points[facet[j]]
                 @inbounds c = points[facet[k]]
@@ -398,7 +399,7 @@ end
 
 
 function covering_radius(points::AbstractVector{SVector{3,T}},
-                         facets::AbstractVector{Vector{Int}}) where {T}
+    facets::AbstractVector{Vector{Int}}) where {T}
     result = zero(T)
     for facet in facets
         center = spherical_circumcenter(points, facet)
@@ -445,12 +446,12 @@ function Base.show(io::IO, rec::PCREORecord)
     @printf(io, "%.3f\n", rec.num_hessian_bits)
     @printf(io, "%.25f\n", rec.facet_distance)
     println(io)
-    for j = 1 : rec.num_points
-        for i = 1 : rec.dimension
+    for j = 1:rec.num_points
+        for i = 1:rec.dimension
             if i > 1
                 print(io, ", ")
             end
-            @printf(io, "%+.25f", rec.points[i,j])
+            @printf(io, "%+.25f", rec.points[i, j])
         end
         println(io)
     end
@@ -461,12 +462,12 @@ function Base.show(io::IO, rec::PCREORecord)
                           for index in facet], ", "))
     end
     println(io)
-    for j = 1 : size(rec.initial_points, 2)
-        for i = 1 : rec.dimension
+    for j = 1:size(rec.initial_points, 2)
+        for i = 1:rec.dimension
             if i > 1
                 print(io, ", ")
             end
-            @printf(io, "%+.17f", rec.initial_points[i,j])
+            @printf(io, "%+.17f", rec.initial_points[i, j])
         end
         println(io)
     end
@@ -475,7 +476,7 @@ end
 
 
 function PCREORecord(points::AbstractMatrix{T},
-                     initial_points::AbstractMatrix{U}) where {T,U}
+    initial_points::AbstractMatrix{U}) where {T,U}
     dimension, num_points = shape(points)
 
     return PCREORecord(
@@ -486,7 +487,7 @@ function PCREORecord(points::AbstractMatrix{T},
         0.0,
         Float64x2(0.0),
         Float64x2(0.0),
-        0,0,
+        0, 0,
         0.0,
         Float64x2.(points),
         Vector{Int}[],
@@ -616,6 +617,65 @@ function PCREORecord(filepath::AbstractString)
 end
 
 
+function symmetrize!(mat::Matrix{T}) where {T}
+    m, n = size(mat)
+    @assert m == n
+    _half = inv(one(T) + one(T))
+    @inbounds for i = 1:n-1
+        @simd ivdep for j = i+1:n
+            sym = _half * (mat[i, j] + mat[j, i])
+            mat[i, j] = mat[j, i] = sym
+        end
+    end
+    return mat
+end
+
+
+function packing_radius(points::Vector{SVector{N,T}},
+    facets::Vector{Vector{Int}}) where {T,N}
+    _half = inv(one(T) + one(T))
+    adjacent_vertices, _ = adjacency_structure(facets)
+    result = typemax(T)
+    for (i, j) in adjacent_vertices
+        result = min(result, norm(points[i] - points[j]))
+    end
+    return _half * result
+end
+
+
+function facet_normal_vector(points::Vector{SVector{3,T}}) where {T}
+    n = length(points)
+    result = zero(SVector{3,T})
+    for i = 1:n-2
+        for j = i+1:n-1
+            for k = j+1:n
+                normal = cross(points[j] - points[i],
+                    points[k] - points[i])
+                normal /= norm(normal)
+                positive = all(!signbit, normal' * p for p in points)
+                negative = all(signbit, normal' * p for p in points)
+                @assert xor(positive, negative)
+                if positive
+                    result += normal
+                else
+                    result -= normal
+                end
+            end
+        end
+    end
+    return result / norm(result)
+end
+
+
+function parallel_facet_distance(points::Vector{SVector{3,T}},
+    facets::Vector{Vector{Int}}) where {T}
+    _, adjacent_facets = adjacency_structure(facets)
+    normals = [facet_normal_vector(points[facet]) for facet in facets]
+    return minimum(one(T) - normals[i]' * normals[j]
+                   for (i, j) in adjacent_facets)
+end
+
+
 end # module PCREO
 
 
@@ -631,62 +691,13 @@ end # module PCREO
 
 # ########################################################### GEOMETRIC PROPERTIES
 
-# function packing_radius(points::Vector{SVector{N,T}},
-#                         facets::Vector{Vector{Int}}) where {T,N}
-#     adjacent_vertices, _ = adjacency_structure(facets)
-#     result = typemax(T)
-#     for (i, j) in adjacent_vertices
-#         result = min(result, norm(points[i] - points[j]))
-#     end
-#     return half(T) * result
-# end
+
 
 # middle(x::AbstractVector) = x[(length(x) + 1) >> 1]
 
-# ############################################################ CONVERGENCE TESTING
+############################################################ CONVERGENCE TESTING
 
-# function symmetrize!(mat::Matrix{T}) where {T}
-#     m, n = size(mat)
-#     @assert m == n
-#     @inbounds for i = 1 : n-1
-#         @simd ivdep for j = i+1 : n
-#             sym = half(T) * (mat[i, j] + mat[j, i])
-#             mat[i, j] = mat[j, i] = sym
-#         end
-#     end
-#     return mat
-# end
 
-# function facet_normal_vector(points::Vector{SVector{3,T}}) where {T}
-#     n = length(points)
-#     result = zero(SVector{3,T})
-#     for i = 1 : n-2
-#         for j = i+1 : n-1
-#             for k = j+1 : n
-#                 normal = cross(points[j] - points[i],
-#                                points[k] - points[i])
-#                 normal /= norm(normal)
-#                 positive = all(!signbit, normal' * p for p in points)
-#                 negative = all(signbit, normal' * p for p in points)
-#                 @assert xor(positive, negative)
-#                 if positive
-#                     result += normal
-#                 else
-#                     result -= normal
-#                 end
-#             end
-#         end
-#     end
-#     return result / norm(result)
-# end
-
-# function parallel_facet_distance(points::Vector{SVector{3,T}},
-#                                  facets::Vector{Vector{Int}}) where {T}
-#     _, adjacent_facets = adjacency_structure(facets)
-#     normals = [facet_normal_vector(points[facet]) for facet in facets]
-#     return minimum(one(T) - normals[i]' * normals[j]
-#                    for (i, j) in adjacent_facets)
-# end
 
 # ############################################################ TOPOLOGICAL DEFECTS
 
